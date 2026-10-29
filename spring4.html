@@ -1,0 +1,1200 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Escáner Batería EV</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+</head>
+<body>
+<style>
+/* Layout: one column (max 760px) of role-based panels; results read top-down: veredicto → comprobaciones → detalle → datos crudos. */
+:root {
+  --bg: #eef2f4;
+  --surface: #ffffff;
+  --surface-2: #e4eaee;
+  --fg: #16202a;
+  --fg-2: #5a6873;
+  --line: #d3dce2;
+  --accent: #0b5c73;
+  --accent-fg: #ffffff;
+  --accent-soft: #d8ecf2;
+  --ok: #2e7d32;
+  --warn: #e65100;
+  --crit: #d32f2f;
+  --ok-soft: #e3f1e4;
+  --warn-soft: #fbe9dc;
+  --crit-soft: #f9e0e0;
+  --chart-pos: #2a78d6;
+  --chart-neg: #e34948;
+  --chart-mid: #c9d2d8;
+  --font-display: 'Barlow', 'Arial Narrow', Arial, sans-serif;
+  --font-body: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'IBM Plex Mono', Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1519; --surface: #161e24; --surface-2: #1f2a31; --fg: #e6ecef; --fg-2: #9aa8b2; --line: #2b3842;
+    --accent: #5cc3dc; --accent-fg: #06232b; --accent-soft: #163640;
+    --ok: #6fc273; --warn: #ffa040; --crit: #ef6b6b; --ok-soft: #1b3320; --warn-soft: #3a2614; --crit-soft: #3d1c1c;
+    --chart-pos: #3987e5; --chart-neg: #e66767; --chart-mid: #3a464f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1519; --surface: #161e24; --surface-2: #1f2a31; --fg: #e6ecef; --fg-2: #9aa8b2; --line: #2b3842;
+  --accent: #5cc3dc; --accent-fg: #06232b; --accent-soft: #163640;
+  --ok: #6fc273; --warn: #ffa040; --crit: #ef6b6b; --ok-soft: #1b3320; --warn-soft: #3a2614; --crit-soft: #3d1c1c;
+  --chart-pos: #3987e5; --chart-neg: #e66767; --chart-mid: #3a464f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.45; -webkit-text-size-adjust: 100%; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .in { max-width: 760px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.brand { display: flex; flex-direction: column; min-width: 0; }
+.brand .eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-2); font-weight: 600; }
+.brand .name { font-family: var(--font-display); font-weight: 700; font-size: 20px; line-height: 1.1; }
+.pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--surface-2); color: var(--fg-2); }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.crit { background: var(--crit-soft); color: var(--crit); }
+.pill.accent { background: var(--accent-soft); color: var(--accent); }
+main { max-width: 760px; margin: 0 auto; padding-block: 16px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 14px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.panel h2 { font-family: var(--font-display); font-weight: 600; font-size: 19px; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+.panel h3 { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-2); margin: 0; font-weight: 600; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.muted { color: var(--fg-2); font-size: 13px; }
+.small { font-size: 12px; }
+button { font: inherit; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); border-radius: 10px; padding: 10px 14px; font-weight: 600; cursor: pointer; min-height: 44px; }
+.btn:hover { filter: brightness(.97); }
+.btn:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.btn.big { width: 100%; font-size: 17px; min-height: 52px; font-family: var(--font-display); letter-spacing: .02em; }
+.btn:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+.btn.sm { min-height: 36px; padding: 6px 10px; font-size: 13px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+label.field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--fg-2); text-transform: uppercase; letter-spacing: .06em; min-width: 0; }
+input[type=text], input[type=number], select, textarea { font: inherit; font-size: 15px; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; width: 100%; min-width: 0; text-transform: none; letter-spacing: 0; font-weight: 400; }
+textarea { font-family: var(--font-mono); font-size: 12px; line-height: 1.4; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.check input { width: 18px; height: 18px; accent-color: var(--accent); }
+.notice { border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.45; background: var(--surface-2); }
+.notice.warn { background: var(--warn-soft); color: var(--fg); border-left: 4px solid var(--warn); }
+.notice.crit { background: var(--crit-soft); border-left: 4px solid var(--crit); }
+.notice.ok { background: var(--ok-soft); border-left: 4px solid var(--ok); }
+.notice.accent { background: var(--accent-soft); border-left: 4px solid var(--accent); }
+.mono { font-family: var(--font-mono); font-size: 12px; word-break: break-all; }
+code { font-family: var(--font-mono); font-size: 12px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+.progress { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.progress > div { height: 100%; width: 0%; background: var(--accent); transition: width .2s; }
+.live { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.live .tile { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.live .tile .k { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-2); font-weight: 600; }
+.live .tile .v { font-family: var(--font-display); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.live .tile .v small { font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--fg-2); margin-left: 3px; }
+/* hero */
+.hero { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: stretch; }
+@media (max-width: 480px) { .hero { grid-template-columns: 1fr; } }
+.soh { display: flex; flex-direction: column; gap: 2px; }
+.soh .big { font-family: var(--font-display); font-weight: 700; font-size: 76px; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.soh .big small { font-size: 28px; font-weight: 600; margin-left: 4px; color: var(--fg-2); }
+.verdict { display: flex; flex-direction: column; gap: 8px; justify-content: center; }
+.verdict .label { font-family: var(--font-display); font-weight: 700; font-size: 30px; line-height: 1; letter-spacing: .01em; }
+.verdict.ok .label, .verdict.ok .bands div.on { color: var(--ok); background-color: var(--ok); } .verdict.warn .label, .verdict.warn .bands div.on { color: var(--warn); background-color: var(--warn); } .verdict.crit .label, .verdict.crit .bands div.on { color: var(--crit); background-color: var(--crit); }
+.verdict .label { background-color: transparent !important; }
+.bands { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+.bands div { height: 10px; border-radius: 3px; background: var(--surface-2); position: relative; }
+.bands div.on { background: currentColor; }
+.bands-labels { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; font-size: 10px; color: var(--fg-2); text-align: center; }
+.kv { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 6px 14px; font-size: 14px; }
+.kv .k { color: var(--fg-2); min-width: 0; }
+.kv .v { font-variant-numeric: tabular-nums; text-align: right; font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+.kv .v.mono { font-weight: 400; }
+.checks { display: flex; flex-direction: column; gap: 6px; }
+.checks .c { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: start; font-size: 14px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.checks .c:last-child { border-bottom: 0; }
+.checks .c .ic { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; }
+.checks .c.ok .ic { background: var(--ok); } .checks .c.warn .ic { background: var(--warn); } .checks .c.crit .ic { background: var(--crit); } .checks .c.na .ic { background: var(--fg-2); }
+.checks .c .d { color: var(--fg-2); font-size: 12px; }
+.checks .c .st { font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.checks .c.ok .st { color: var(--ok); } .checks .c.warn .st { color: var(--warn); } .checks .c.crit .st { color: var(--crit); } .checks .c.na .st { color: var(--fg-2); }
+.stars { font-size: 14px; letter-spacing: 2px; color: var(--accent); }
+.score { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.score .s { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+.score .s .k { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-2); font-weight: 600; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-2); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tablewrap { overflow-x: auto; max-width: 100%; }
+.chart { width: 100%; height: auto; display: block; }
+.chart text { font-family: var(--font-mono); font-size: 11px; fill: var(--fg-2); }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .zero { stroke: var(--fg-2); stroke-width: 1; }
+.chart .lbl { fill: var(--fg); font-weight: 500; }
+.tip { position: absolute; pointer-events: none; background: var(--fg); color: var(--bg); font-size: 12px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -110%); z-index: 5; }
+.chartwrap { position: relative; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--fg-2); }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; background: var(--sw); }
+details { border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; }
+details summary { cursor: pointer; padding: 10px 0; font-weight: 600; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+details summary::after { content: "+"; color: var(--fg-2); font-family: var(--font-mono); }
+details[open] summary::after { content: "–"; }
+details > .body { padding: 0 0 12px; display: flex; flex-direction: column; gap: 10px; }
+.log { font-family: var(--font-mono); font-size: 11px; line-height: 1.35; white-space: pre-wrap; word-break: break-all; background: var(--surface-2); border-radius: 8px; padding: 8px; max-height: 260px; overflow: auto; }
+.log .tx { color: var(--accent); }
+.log .err { color: var(--crit); }
+.hist { display: flex; flex-direction: column; gap: 6px; }
+.hist .h { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 8px 10px; background: var(--surface-2); border-radius: 8px; font-size: 13px; }
+.hist .h b { font-variant-numeric: tabular-nums; }
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 14px; font-weight: 600; z-index: 20; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+.dtc { display: flex; flex-direction: column; gap: 8px; }
+.dtc .d { border-left: 4px solid var(--warn); background: var(--surface-2); padding: 8px 10px; border-radius: 6px; font-size: 13px; }
+.dtc .d.crit { border-color: var(--crit); }
+.dtc .d code { background: var(--surface); }
+.modcard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.modcard.has-active { border-left: 4px solid var(--crit); } .modcard.has-mem { border-left: 4px solid var(--warn); } .modcard.clean { border-left: 4px solid var(--ok); }
+.modcard .mh { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.modcard .mh b { font-size: 15px; }
+.modcard .mid { font-size: 12px; color: var(--fg-2); font-family: var(--font-mono); word-break: break-all; }
+.dtclist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dtclist li { background: var(--surface-2); border-radius: 6px; padding: 6px 8px; font-size: 13px; display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: start; }
+.dtclist li code { font-size: 13px; font-weight: 600; background: var(--surface); }
+.dtclist li .st { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 11px; color: var(--fg-2); font-family: var(--font-mono); }
+.btn.danger { border-color: var(--crit); color: var(--crit); background: var(--surface); }
+.btn.danger.armed { background: var(--crit); color: #fff; }
+.demo-tag { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--warn); }
+.sensors { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; }
+.sensors .t { background: var(--surface-2); border-radius: 6px; padding: 6px 8px; text-align: center; }
+.sensors .t .k { font-size: 10px; color: var(--fg-2); text-transform: uppercase; letter-spacing: .05em; }
+.sensors .t .v { font-family: var(--font-display); font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sensors .t.hot .v { color: var(--warn); }
+.term { display: flex; gap: 8px; }
+.term input { font-family: var(--font-mono); }
+@media (prefers-reduced-motion: reduce) { .progress > div { transition: none; } }
+</style>
+
+<div class="topbar"><div class="in">
+  <div class="brand"><span class="eyebrow">RevisaElAuto · herramienta interna</span><span class="name">Escáner de batería EV</span></div>
+  <span class="pill" id="connPill"><span class="dot"></span><span id="connText">Sin adaptador</span></span>
+</div></div>
+
+<main>
+  <section class="panel" id="connPanel">
+    <div class="panel-head"><h2>1 · Adaptador OBD</h2><span class="pill accent" id="profilePill">Dacia Spring / Kwid E-Tech · 26,8 kWh · 72 celdas</span></div>
+    <div id="btWarn" class="notice warn" hidden></div>
+    <div class="grid2">
+      <label class="field">El nombre del adaptador empieza con<input type="text" id="inBleName" value="IOS-Vlink" autocomplete="off" autocapitalize="none"></label>
+      <label class="check" style="align-self:end;text-transform:none;letter-spacing:0"><input type="checkbox" id="optAllDevices"> Mostrar todos los dispositivos</label>
+    </div>
+    <div class="row">
+      <button class="btn primary" id="btnConnect">Conectar por Bluetooth</button>
+      <button class="btn" id="btnDisconnect" hidden>Desconectar</button>
+      <button class="btn" id="btnDemo">Modo demo</button>
+      <button class="btn sm" id="btnForget" hidden>Olvidar adaptador</button>
+    </div>
+    <p class="muted small" id="rememberedInfo" hidden></p>
+    <div id="connError" class="notice crit" hidden></div>
+    <div class="kv" id="adapterInfo" hidden>
+      <span class="k">Adaptador</span><span class="v" id="adName">–</span>
+      <span class="k">Firmware ELM</span><span class="v mono" id="adVer">–</span>
+      <span class="k">Voltaje en el conector OBD</span><span class="v" id="adVolt">–</span>
+    </div>
+    <p class="muted">El auto debe estar encendido en <b>Ready</b>, detenido y sin cargar. El conector OBD del Spring/Kwid está bajo la guantera del copiloto. Si el adaptador quedó emparejado en otra app, ciérrala primero.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>2 · Vehículo</h2></div>
+    <div class="grid2">
+      <label class="field">Patente<input type="text" id="inPlate" placeholder="ABCD12" autocapitalize="characters" autocomplete="off"></label>
+      <label class="field">Kilometraje (tablero)<input type="number" id="inKm" placeholder="se lee del auto si responde" inputmode="numeric"></label>
+      <label class="field">Modelo<input type="text" id="inModel" value="Dacia Spring 2025" autocomplete="off"></label>
+      <label class="field">Inspector<input type="text" id="inInspector" value="Matías Milla" autocomplete="off"></label>
+    </div>
+    <label class="field">Notas<input type="text" id="inNotes" placeholder="opcional" autocomplete="off"></label>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>3 · Comprobación</h2><span class="muted" id="planInfo"></span></div>
+    <div class="row">
+      <label class="check"><input type="checkbox" id="optCells" checked> Mapa de las 72 celdas</label>
+      <label class="check"><input type="checkbox" id="optTemps" checked> Sensores de temperatura</label>
+      <label class="check"><input type="checkbox" id="optExt" checked> Contadores e historial del BMS</label>
+      <label class="check"><input type="checkbox" id="optEvc" checked> Datos del vehículo (EVC, VIN, DTC)</label>
+      <label class="check"><input type="checkbox" id="optModules" checked> Otros módulos (identificación y DTC)</label>
+    </div>
+    <button class="btn big primary" id="btnScan" disabled>Iniciar comprobación</button>
+    <div id="progressBox" hidden>
+      <div class="progress"><div id="progBar"></div></div>
+      <div class="row" style="justify-content:space-between"><span class="muted" id="progText">…</span><button class="btn sm" id="btnCancel">Cancelar</button></div>
+      <div class="live" id="liveTiles"></div>
+    </div>
+    <div id="scanError" class="notice crit" hidden></div>
+  </section>
+
+  <div id="results" hidden>
+    <section class="panel">
+      <div class="panel-head"><h2>Resultado</h2><span id="demoTag" class="demo-tag" hidden>Datos simulados · modo demo</span></div>
+      <div class="hero">
+        <div class="soh">
+          <h3>Estado de salud (SOH) según el BMS</h3>
+          <div class="big"><span id="sohVal">–</span><small>%</small></div>
+          <div class="muted" id="sohSub"></div>
+        </div>
+        <div class="verdict" id="verdictBox">
+          <h3>Veredicto</h3>
+          <div class="label" id="verdictLabel">–</div>
+          <div class="bands" id="bands"><div></div><div></div><div></div><div></div><div></div></div>
+          <div class="bands-labels"><span>Excelente</span><span>Buena</span><span>Aceptable</span><span>Preocup.</span><span>Evitar</span></div>
+          <div class="muted" id="verdictSub"></div>
+        </div>
+      </div>
+      <div class="kv" id="energyKv"></div>
+      <div class="score" id="scoreBox"></div>
+      <p class="muted" id="assessment"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Comprobaciones</h2>
+      <div class="checks" id="checksBox"></div>
+    </section>
+
+    <section class="panel">
+      <h2>BMS en vivo</h2>
+      <div class="kv" id="bmsKv"></div>
+    </section>
+
+    <section class="panel" id="cellsPanel">
+      <div class="panel-head"><h2>Celdas</h2><button class="btn sm" id="btnCellTable">Ver tabla</button></div>
+      <div class="kv" id="cellKv"></div>
+      <div class="chartwrap" id="cellChartWrap"></div>
+      <div class="legend"><span style="--sw:var(--chart-pos)">sobre la mediana</span><span style="--sw:var(--chart-neg)">bajo la mediana</span><span style="--sw:var(--chart-mid)">±2 mV</span></div>
+      <p class="muted small">Desviación de cada celda respecto a la mediana del pack, leída celda por celda con el auto detenido. Un pack sano muestra una franja plana; una celda que se descuelga hacia abajo es la que limita la autonomía.</p>
+      <div class="tablewrap" id="cellTableWrap" hidden></div>
+    </section>
+
+    <section class="panel" id="tempsPanel">
+      <h2>Temperaturas</h2>
+      <div class="kv" id="tempKv"></div>
+      <div class="sensors" id="sensorsBox"></div>
+    </section>
+
+    <section class="panel" id="dtcPanel">
+      <div class="panel-head"><h2>Módulos y códigos de falla</h2><button class="btn sm" id="btnClearAll" hidden>Borrar en todos los módulos</button></div>
+      <p class="muted small" id="modSummary"></p>
+      <div class="notice warn small" id="clearWarn" hidden>Borrar códigos elimina el historial de fallas del módulo (y las condiciones en que ocurrieron). En una inspección a un cliente no los borres: ese historial es parte de lo que estás evaluando. Úsalo en tu propio auto o después de una reparación. Cada botón pide un segundo toque para confirmar.</div>
+      <div class="dtc" id="dtcBox"></div>
+    </section>
+
+    <section class="panel" id="vehPanel">
+      <h2>Vehículo y controlador EV</h2>
+      <div class="kv" id="vehKv"></div>
+    </section>
+
+
+    <section class="panel" id="extPanel">
+      <h2>Historial del BMS</h2>
+      <p class="muted small">Contadores internos de la batería. Si el BMS no los entrega, la fila no aparece.</p>
+      <div class="kv" id="extKv"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Exportar</h2>
+      <div class="row">
+        <button class="btn" id="btnCopySummary">Copiar resumen</button>
+        <button class="btn" id="btnCopyJson">Copiar JSON</button>
+        <button class="btn" id="btnShare" hidden>Compartir</button>
+      </div>
+      <p class="muted small">El JSON trae todas las lecturas (incluidos los bytes crudos de cada DID). Pégalo en el chat para generar el informe PDF de RevisaElAuto o para revisar una lectura rara.</p>
+      <textarea id="exportArea" rows="6" readonly hidden></textarea>
+    </section>
+
+    <details><summary>Lecturas crudas por DID</summary><div class="body"><div class="tablewrap" id="rawTableWrap"></div></div></details>
+  </div>
+
+  <section class="panel" id="histPanel" hidden>
+    <div class="panel-head"><h2>Escaneos guardados en este teléfono</h2><button class="btn sm" id="btnClearHist">Borrar</button></div>
+    <div class="hist" id="histBox"></div>
+  </section>
+
+  <details id="advDetails"><summary>Avanzado · terminal y registro</summary><div class="body">
+    <div class="term"><input type="text" id="termIn" placeholder="ATI · ATRV · 03229003 …" autocapitalize="characters" autocomplete="off"><button class="btn" id="termSend">Enviar</button></div>
+    <div class="row">
+      <button class="btn sm term-q" data-c="ATI">ATI</button><button class="btn sm term-q" data-c="ATRV">ATRV</button><button class="btn sm term-q" data-c="ATDPN">ATDPN</button><button class="btn sm term-q" data-c="03229003">SOH (03229003)</button><button class="btn sm term-q" data-c="03229001">SOC (03229001)</button>
+    </div>
+    <p class="muted small">Solo para depurar: no hace falta escribir nada aquí en el uso normal. Los comandos de datos van a la última ECU seleccionada (tras una comprobación, el BMS). Para apuntar al BMS del Spring 2025 a mano: <code>ATSP7</code>, <code>ATCP18</code>, <code>ATSHDADBF1</code>, <code>ATCRA18DAF1DB</code>, <code>ATFCSH18DADBF1</code>; al EVC: <code>ATSHDADAF1</code>, <code>ATCRA18DAF1DA</code>, <code>ATFCSH18DADAF1</code>.</p>
+    <div class="row" style="justify-content:space-between"><h3>Diagnóstico de bus</h3><button class="btn sm primary" id="btnProbe">Probar qué ECU responden (≈1 min)</button></div>
+    <p class="muted small">Prueba el BMS, el EVC y el tablero en 11 y 29 bits, más una llamada general a todas las ECU. Sirve para saber en qué bus y con qué dirección responde el auto cuando la comprobación dice NO DATA.</p>
+    <div id="probeOut" class="notice accent" hidden></div>
+    <div class="row" style="justify-content:space-between"><h3>Registro de comunicación</h3><div class="row"><button class="btn sm" id="btnCopyLog">Copiar registro</button><button class="btn sm" id="btnClearLog">Limpiar</button></div></div>
+    <div class="log" id="logBox"></div>
+  </div></details>
+
+  <p class="muted small">SOH, SOC y voltajes son los que reporta el BMS del vehículo (DIDs UDS 0x90xx del LBC, servicio 0x22), decodificados con las definiciones de CanZE Plus y Battery-Emulator para la plataforma CMF-A EV. No es un ensayo de capacidad; úsalo como lectura orientativa dentro de la inspección.</p>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+
+<script>
+'use strict';
+// ───────────────────────────── Perfil del vehículo ─────────────────────────────
+const PROFILE = {
+  id: 'cmfa-ev', name: 'Dacia Spring / Renault Kwid E-Tech (CMF-A EV)',
+  cells: 72, maxCellsProbe: 96, kwhUsable: 26.8, kwhNominal: 27.4, chem: 'NMC (72s1p)',
+  cellMin: 2.70, cellMax: 4.25, packMin: 218, packMax: 304, tempMin: -20, tempMax: 60,
+  sohBands: [95, 90, 85, 80],     // Excelente ≥95, Buena ≥90, Aceptable ≥85, Preocupante ≥80, Evitar <80
+  deltaBands: [15, 30, 50, 80],   // mV entre celda máx y mín, en reposo
+};
+// Direcciones de diagnóstico. El Spring 2024+ (y la arquitectura Renault nueva) usa 29 bits: petición 18DAxxF1, respuesta 18DAF1xx.
+// El Spring 2021-2023 / Kwid E-Tech de primera generación usa 11 bits (79B/7BB). La app prueba en orden y recuerda cuál responde.
+const ECUS = {
+  LBC: { name: 'BMS batería (LBC)', candidates: [{ mode: 29, req: 'DADBF1', res: '18DAF1DB' }, { mode: 11, req: '79B', res: '7BB' }] },
+  EVC: { name: 'Controlador EV (VCM/EVC)', candidates: [{ mode: 29, req: 'DADAF1', res: '18DAF1DA' }, { mode: 11, req: '7E4', res: '7EC' }] },
+  TDB: { name: 'Tablero (cluster)', candidates: [{ mode: 11, req: '743', res: '763' }] },
+};
+const MODULE_NAMES_29 = { DB: 'BMS batería (LBC)', DC: 'BMS 2 (LBC2)', DA: 'Controlador EV (VCM)', DE: 'Cargador a bordo (BCB/OBC)', DF: 'Inversor / motor (INV-ME)', D2: 'Gateway de seguridad (S-GW)', '2D': 'ABS / ESC', E2: 'Freno electromecánico (E-ACT)', '60': 'Tablero', '40': 'Caja / tracción' };
+const MODULES_11 = [
+  { req: '743', res: '763', name: 'Tablero (cluster)' }, { req: '745', res: '765', name: 'Carrocería (UCH/BCM)' }, { req: '744', res: '764', name: 'Climatización (HVAC)' },
+  { req: '742', res: '762', name: 'Dirección asistida (EPS)' }, { req: '752', res: '772', name: 'Airbag (SRS)' }, { req: '7CA', res: '7DA', name: 'Telemática (DCM/TCU)' },
+  { req: '740', res: '760', name: 'ESP / ABS' }, { req: '74D', res: '76D', name: 'Módulo de seguridad (USM)' }, { req: '73F', res: '761', name: 'Sonido peatones (VSP)' }, { req: '714', res: '734', name: 'Multimedia (MIU)' },
+];
+const ADDR_KEY = 'revisaelauto_ev_addr';
+function loadAddrCache() { try { return JSON.parse(localStorage.getItem(ADDR_KEY) || '{}') || {}; } catch (e) { return {}; } }
+function saveAddrCache(name, a) { try { const c = loadAddrCache(); c[name] = { mode: a.mode, req: a.req, res: a.res }; localStorage.setItem(ADDR_KEY, JSON.stringify(c)); } catch (e) { /* nada */ } }
+// Decodificación: valor = (raw − offset) × resolución, bits contados desde el primer byte de datos (tras 62 xx xx).
+const u8 = (b, i = 0) => b[i];
+const u16 = (b, i = 0) => (b[i] << 8) | b[i + 1];
+const u24 = (b, i = 0) => (b[i] << 16) | (b[i + 1] << 8) | b[i + 2];
+const u32 = (b, i = 0) => ((b[i] << 24) >>> 0) + ((b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3]);
+const s32 = (b, i = 0) => (u32(b, i) | 0);
+const i16 = (b, i = 0) => { const v = u16(b, i); return v & 0x8000 ? v - 0x10000 : v; };
+const ascii = (b) => Array.from(b).filter(x => x >= 32 && x < 127).map(x => String.fromCharCode(x)).join('').trim();
+const balWord = (b) => { const r = u32(b); if (r === 0 || r === 0x80000000) return 0; return ((r ^ 0x80000000) | 0); };
+function decTemp(b) {
+  const raw = u16(b);
+  const a = (raw - 640) * 0.0625;           // CanZE Plus (Zoe/Spring LBC)
+  if (a >= -40 && a <= 90) return { v: a };
+  const alt = (raw - 400) / 2;              // Battery-Emulator CMFA
+  if (alt >= -40 && alt <= 90) return { v: alt, alt: true };
+  return { v: a, suspect: true };
+}
+// DIDs del BMS (ECU LBC, 0x79B → 0x7BB). min = bytes mínimos esperados.
+const LBC_DIDS = [
+  { did: '9001', key: 'socBms',  label: 'SOC real (BMS)',            unit: '%',  min: 1, dec: b => (u8(b) - 6) * 0.5, f: 1 },
+  { did: '9002', key: 'socUser', label: 'SOC mostrado al usuario',    unit: '%',  min: 2, dec: b => u16(b) * 0.01, f: 1 },
+  { did: '9003', key: 'soh',     label: 'SOH energía (SOHE)',         unit: '%',  min: 2, dec: b => u16(b) * 0.01, f: 2, core: true },
+  { did: '9005', key: 'packV',   label: 'Voltaje del pack (CAN)',     unit: 'V',  min: 2, dec: b => u16(b) * 0.1, f: 1 },
+  { did: '9006', key: 'cellSumV',label: 'Suma de voltajes de celda',  unit: 'V',  min: 4, dec: b => u32(b) / 1024, f: 2 },
+  { did: '9007', key: 'cellMaxV',label: 'Celda máxima (BMS)',         unit: 'V',  min: 2, dec: b => u16(b) / 1024, f: 3 },
+  { did: '9008', key: 'cellMaxN',label: 'N° celda máxima',            unit: '',   min: 1, dec: b => u8(b), f: 0 },
+  { did: '9009', key: 'cellMinV',label: 'Celda mínima (BMS)',         unit: 'V',  min: 2, dec: b => u16(b) / 1024, f: 3 },
+  { did: '900A', key: 'cellMinN',label: 'N° celda mínima',            unit: '',   min: 1, dec: b => u8(b), f: 0 },
+  { did: '900D', key: 'currentA',label: 'Corriente instantánea',      unit: 'A',  min: 4, dec: b => (u32(b) - 48000) * 0.025, f: 2 },
+  { did: '900E', key: 'maxRegenKw', label: 'Potencia máx. de regeneración', unit: 'kW', min: 2, dec: b => u16(b) * 0.01, f: 1 },
+  { did: '900F', key: 'maxDchgKw',  label: 'Potencia máx. disponible (descarga)', unit: 'kW', min: 2, dec: b => u16(b) * 0.01, f: 1 },
+  { did: '9011', key: 'lv12',    label: 'Alimentación 12 V (vista por el BMS)', unit: 'V', min: 2, dec: b => u16(b) / 1024, f: 2 },
+  { did: '9012', key: 'tAvg',    label: 'Temperatura media',          unit: '°C', min: 2, dec: b => decTemp(b), f: 1, temp: true },
+  { did: '9013', key: 'tMin',    label: 'Temperatura mínima',         unit: '°C', min: 2, dec: b => decTemp(b), f: 1, temp: true },
+  { did: '9014', key: 'tMax',    label: 'Temperatura máxima',         unit: '°C', min: 2, dec: b => decTemp(b), f: 1, temp: true },
+  { did: '9018', key: 'maxChgKw',label: 'Potencia máx. de carga',     unit: 'kW', min: 2, dec: b => u16(b) * 0.01, f: 1 },
+  { did: '9019', key: 'endOfCharge', label: 'Fin de carga',           unit: '',   min: 1, dec: b => (u8(b) & 1) ? 'Carga detenida' : 'Carga OK', f: null },
+  { did: '901A', key: 'interlock', label: 'Interlock conector HV',    unit: '',   min: 1, dec: b => ['No usado', 'Abierto', 'Cerrado', 'No disponible'][u8(b) & 3], f: null },
+  { did: '901B', key: 'batteryId', label: 'N° de identificación de la batería', unit: '', min: 4, dec: b => ascii(b), f: null, id: true },
+];
+const LBC_EXT = [
+  { did: '91C1', key: 'packLifeMin', label: 'Vida del pack desde el 1er encendido', unit: 'h', min: 3, dec: b => u24(b) / 60, f: 0 },
+  { did: '91C6', key: 'dcrChg',  label: 'Resistencia DC en carga',    unit: 'mΩ', min: 2, dec: b => u16(b) * 0.25, f: 2 },
+  { did: '91C7', key: 'dcrDchg', label: 'Resistencia DC en descarga', unit: 'mΩ', min: 2, dec: b => u16(b) * 0.25, f: 2 },
+  { did: '91C8', key: 'availKwh',label: 'Energía disponible (BMS)',   unit: 'kWh',min: 3, dec: b => u24(b) * 0.001, f: 2 },
+  { did: '91CF', key: 'batteryKm', label: 'Kilometraje de la batería', unit: 'km', min: 4, dec: b => ((u32(b) ^ 0x80000000) >>> 0) * 0.03125, f: 0 },
+  { did: '91BC', key: 'sohAvailPower', label: 'SOH potencia disponible', unit: '%', min: 2, dec: b => u16(b) * 0.1, f: 1 },
+  { did: '91BD', key: 'sohGenPower',   label: 'SOH potencia regenerada', unit: '%', min: 2, dec: b => u16(b) * 0.1, f: 1 },
+  { did: '9243', key: 'kwhCharged',  label: 'Energía cargada acumulada', unit: 'kWh', min: 4, dec: b => u32(b) * 0.001, f: 1 },
+  { did: '9245', key: 'kwhDischarged', label: 'Energía descargada acumulada (CD)', unit: 'kWh', min: 4, dec: b => u32(b) * 0.001, f: 1 },
+  { did: '9247', key: 'kwhRegen',    label: 'Energía regenerada acumulada (CD)', unit: 'kWh', min: 4, dec: b => u32(b) * 0.001, f: 1 },
+  { did: '9210', key: 'fullCharges', label: 'Cargas completas',        unit: '',   min: 2, dec: b => u16(b), f: 0 },
+  { did: '9215', key: 'partialCharges', label: 'Cargas parciales',     unit: '',   min: 2, dec: b => u16(b), f: 0 },
+  { did: '9211', key: 'dcCharges',   label: 'Cargas DC',               unit: '',   min: 2, dec: b => u16(b), f: 0 },
+  { did: '924F', key: 'balAh',   label: 'Capacidad balanceada acumulada', unit: 'Ah', min: 4, dec: b => balWord(b) / 1024, f: 2 },
+  { did: '9250', key: 'balH',    label: 'Tiempo total de balanceo',    unit: 'h',  min: 4, dec: b => balWord(b) / 1024, f: 1 },
+  { did: '912B', key: 'balancing', label: 'Celdas en balanceo ahora', unit: '',   min: 9, dec: b => decBalancing(b), f: null },
+];
+const LBC_ID = [
+  { did: 'F187', key: 'lbcPart', label: 'N° de parte BMS', dec: b => ascii(b) },
+  { did: 'F194', key: 'lbcSoft', label: 'Software BMS',    dec: b => ascii(b) },
+  { did: 'F195', key: 'lbcVer',  label: 'Versión BMS',     dec: b => ascii(b) },
+  { did: 'F18A', key: 'lbcSupplier', label: 'Proveedor BMS', dec: b => ascii(b) },
+];
+// DIDs del controlador EV. Primero los de la arquitectura nueva (VCM 29 bits, tomados del Zoe Ph2), luego los antiguos (EVC 11 bits).
+// Los que la ECU no tenga responden NRC 31 en milisegundos y se omiten.
+const EVC_DIDS = [
+  { did: '2006', key: 'odometer', label: 'Odómetro',                  unit: 'km', min: 3, dec: b => u24(b), f: 0 },
+  { did: '216C', key: 'odometer2', label: 'Distancia total (no reiniciable)', unit: 'km', min: 4, dec: b => ((u32(b) ^ 0x80000000) >>> 0) * 0.01, f: 0 },
+  { did: '2181', key: 'odometer3', label: 'Registro de kilometraje',  unit: 'km', min: 4, dec: b => ((u32(b) ^ 0x80000000) >>> 0) * 0.1, f: 0 },
+  { did: '2005', key: 'batt14',   label: 'Batería 12 V (EVC)',        unit: 'V',  min: 2, dec: b => u16(b) * 0.01, f: 2 },
+  { did: '20BE', key: 'socEvc',   label: 'SOC HV según el EVC',       unit: '%',  min: 2, dec: b => u16(b) * 0.02, f: 1 },
+  { did: '21CD', key: 'socUserEvc', label: 'SOC usuario según el EVC', unit: '%', min: 2, dec: b => u16(b), f: 0 },
+  { did: '303D', key: 'insulationKohm', label: 'Resistencia de aislación HV', unit: 'kΩ', min: 2, dec: b => u16(b) * 0.1, f: 1 },
+  { did: '303F', key: 'hvbTempEvc', label: 'Temperatura batería según el EVC', unit: '°C', min: 1, dec: b => u8(b) - 40, f: 0 },
+  { did: '3044', key: 'availChgKw', label: 'Potencia disponible para carga externa', unit: 'kW', min: 2, dec: b => u16(b) * 0.1, f: 1 },
+  { did: '300F', key: 'acChgKw',  label: 'Potencia de carga AC disponible', unit: 'kW', min: 2, dec: b => u16(b) * 0.025, f: 2 },
+  { did: '21CC', key: 'hvA',      label: 'Corriente HV (EVC)',        unit: 'A',  min: 2, dec: b => (u16(b) - 2000) * 0.25, f: 2 },
+  { did: '21DF', key: 'dcdcA',    label: 'Corriente del DC-DC 12 V',  unit: 'A',  min: 2, dec: b => u16(b) - 32767, f: 0 },
+  { did: '20DE', key: 'ambientC', label: 'Temperatura exterior',      unit: '°C', min: 2, dec: b => (u16(b) - 2730) * 0.1, f: 1 },
+  { did: '3451', key: 'rangeKm',  label: 'Autonomía estimada en tablero', unit: 'km', min: 2, dec: b => u16(b), f: 0 },
+  { did: '2B85', key: 'plug',     label: 'Enchufe de carga',          unit: '',   min: 1, dec: b => (u8(b) & 1) ? 'presente' : 'no conectado', f: null },
+  { did: '2003', key: 'speed',    label: 'Velocidad',                 unit: 'km/h', min: 2, dec: b => u16(b) * 0.01, f: 1 },
+  { did: '3206', key: 'sohEvc',   label: 'SOH según el EVC',          unit: '%',  min: 1, dec: b => u8(b), f: 0 },
+  { did: '2002', key: 'socEvcOld', label: 'SOC según el EVC (antiguo)', unit: '%', min: 2, dec: b => u16(b) * 0.02, f: 1 },
+  { did: '3203', key: 'hvV',      label: 'Voltaje HV medido por el EVC', unit: 'V', min: 2, dec: b => u16(b) * 0.5, f: 1 },
+  { did: '320C', key: 'availDchgKwh', label: 'Energía disponible para descarga', unit: 'kWh', min: 2, dec: b => u16(b) * 0.005, f: 2 },
+  { did: '33B1', key: 'ambientCOld', label: 'Temperatura exterior (antiguo)', unit: '°C', min: 1, dec: b => u8(b) - 40, f: 0 },
+];
+const MODULE_ID_DIDS = [{ did: 'F187', key: 'part', label: 'N° de parte' }, { did: 'F194', key: 'soft', label: 'Software' }, { did: 'F18A', key: 'supplier', label: 'Proveedor' }];
+function cellDid(n) { let d = 0x9020; for (let k = 0; k < n; k++) { d++; if ((d & 0x1f) === 0) d++; } return d.toString(16).toUpperCase(); }
+function tempDid(n) { let d = 0x9130; for (let k = 0; k < n; k++) { d++; if ((d & 0x1f) === 0) d++; } return d.toString(16).toUpperCase(); }
+function decBalancing(b) { // mapa de bits al final del payload: celda 1 = bit 0 del último byte
+  const on = []; for (let i = 0; i < PROFILE.cells; i++) { const byte = b[b.length - 1 - (i >> 3)]; if (byte === undefined) break; if ((byte >> (i & 7)) & 1) on.push(i + 1); }
+  return on.length ? `${on.length} (${on.join(', ')})` : 'ninguna';
+}
+const NRC = { '10': 'rechazo general', '11': 'servicio no soportado', '12': 'subfunción no soportada', '13': 'largo incorrecto', '22': 'condiciones no correctas', '31': 'DID fuera de rango (no existe)', '33': 'acceso de seguridad denegado', '78': 'respuesta pendiente', '7E': 'no soportado en esta sesión', '7F': 'no soportado en esta sesión' };
+const DTC_TABLES = {"LBC":{"dtc":{"1B00":"DF284 SUPPLY VOLTAGE CONTROL UNIT","1B01":"DF198 DRIVE BATTERY CELLS","1B02":"Battery pack voltage","1B03":"DF305 DRIVE BATTERY OVERVOLTAGE","1B04":"DF016 TEMPERATURE SENSOR CIRCUIT","1B05":"DF018 TEMPERATURE SENSOR CIRCUIT","1B06":"All module thermistors in failure","1B07":"DF329 TEMPERATURE SENSOR DRIVE BATTERY COOLANT","1B08":"DF174 RADIATOR FAN DRIVE BATTERY","1B09":"DF175 RADIATOR FAN DRIVE BATTERY","1B0A":"Main relay control output","1B0B":"Precharge relay control output","1B0C":"DF243 TEMPERATURE DRIVE BATTERY TRAY","1B0D":"DF032 BMS","1B0E":"DF006 BMS","1B0F":"DF283 SUPPLY VOLTAGE CONTROL UNIT","1B10":"Master CPU/Slave Communication","1B12":"DF331 BMS","1B14":"Relay 3 control output","1B15":"Temp 2 thermistor input","1B16":"DF332 BMS","1B17":"Air/Ambient thermistor input","1B18":"DF396 LOCK LOCKING TOOL","1B19":"DF352 DRIVE BATTERY LOCKOUT","1B1A":"DF354 CHARGE INTERLOCK DRIVE BATTERY","1B1B":"DF398 ENGINE BATTERY ACCESS DOOR INTERLOCK","1B1C":"DF351 ELECTRICAL SYSTEM CIRCUIT","1B1D":"Current sensor 5V supply","1B1E":"DF011 CURRENT SENSOR DRIVE BATTERY","1B1F":"DF191 CURRENT SENSOR, DRIVE BATTERY","1BA4":"current sensor input1","1B20":"DF287 DC CHARGE RELAY CIRCUIT","1B21":"DF027 BMS","1B30":"DF336 TEMPERATURE SENSOR MODULE 1","1B31":"DF337 TEMPERATURE SENSOR MODULE 2","1B32":"DF339 TEMPERATURE SENSOR MODULE 3","1B33":"DF341 TEMPERATURE SENSOR MODULE 4","1B34":"DF343 TEMPERATURE SENSOR MODULE 5","1B35":"DF345 TEMPERATURE SENSOR MODULE 6","1B36":"DF347 TEMPERATURE SENSOR MODULE 7","1B37":"DF349 TEMPERATURE SENSOR MODULE 8","1B38":"module thermistor 9","1B39":"module thermistor 10","1B3A":"Module thermistor 11","1B3B":"module thermistor 12","1B3C":"Module thermistor 13","1B3D":"module thermistor 14","1B3E":"module thermistor 15","1B3F":"Module thermistor 16","1B40":"module thermistor 17","1B41":"module thermistor 18","1B42":"module thermistor 19","1B43":"module thermistor 20","1B44":"Module thermistor 21","1B45":"module thermistor 22","1B46":"Module thermistor 23","1B47":"Module thermistor 24","1B48":"Module thermistor 25","1B49":"Module thermistor 26","1B4A":"module thermistor 27","1B4B":"Module thermistor 28","1B4C":"Module thermistor 29","1B4D":"Module thermistor 30","1B4E":"module thermistor 31","1B4F":"Module thermistor 32","1B60":"DF360 MODULE 1 CELL DETECTION LEADS","1B61":"DF365 CELL DETECTION WIRES FOR MODULE 2","1B62":"DF370 MODULE 3 CELL DETECTION LEADS","1B63":"DF375 CELL DETECTION WIRES FOR MODULE 4","1B64":"DF380 MODULE 5 CELL DETECTION LEADS","1B65":"DF385 MODULE 6 CELL DETECT LEADS","1B66":"DF390 CELL DETECTION WIRES FOR MODULE 7","1B67":"DF395 MODULE 8 CELL DETECTION LEADS","1B68":"Cell sensing lines - Module 9","1B69":"Cell sensing lines - Module 10","1B6A":"Cell sensing lines - Module 11","1B6B":"Cell sensing lines - Module 12","1B6C":"Cell sensing lines - Module 13","1B6D":"Cell sensing lines - Module 14","1B6E":"Cell sensing lines - Module 15","1B6F":"Cell sensing lines - Module 16","1B70":"Cell sensing lines - Module 17","1B71":"Cell sensing lines - Module 18","1B72":"Cell sensing lines - Module 19","1B73":"Cell sensing lines - Module 20","1B74":"Cell sensing lines - Module 21","1B80":"State of Charge Estimation","1B81":"DF330 DRIVE BATTERY CONDITION","1B82":"DF289 LIMIT AVAILABLE POWER","1B83":"DF288 DRIVE BATTERY CELLS","1BA0":"Low voltage supply input (SCPU)","1BA1":"Cell input lines (SCPU)","1BA2":"Insulation Resistance measurement circuit","1BA3":"SCPU/PCB temperature sensor","1BAD":"Internal memory RAM/ROM (SCPU)","1BAE":"External NV memory (EEPROMFLASH)1","1BAF":"CAN current sensor (SCPU)","1BB1":"Safety CPU/Slave Communication","1BB2":"ASIC (redundancy)","1BB3":"Hot Spot (SPARE) sensor","1BB4":"Pack module temperature sensor (SCPU)","1BB5":"CAN current sensor (SCPU)1","1BB6":"Flash memory failure (FOTA) (SCPU)","E140":"DF281 ECM NOT DETECTED BY BMS CAN-HV","E142":"CAN from Inverter","E143":"DF282 EVC NOT DETECTED BY BMS CAN-HV","FD00":"FOTA : SW bloc","FD01":"FOTA : Calibration bloc"},"test":{"00":"Device and failure type ODB codding","01":"General Electrical Failure","02":"General signal failure","03":"FM / PWM (Pulse Width Modulated) Failures","04":"System Internal Failures","05":"System Programming Failures","06":"Algorithm Based Failures","07":"Mechanical Failures","08":"Bus Signal / Message Failures","09":"Component Failures","11":"circuit short to ground","12":"circuit short to battery","13":"circuit open","14":"circuit short to ground or open","15":"circuit short to battery or open","16":"circuit voltage below threshold","17":"circuit voltage above threshold","18":"circuit current below threshold","19":"circuit current above threshold","1A":"circuit resistance below threshold","1B":"circuit resistance above threshold","1C":"circuit voltage out of range","1D":"circuit current out of range","1E":"circuit resistance out of range","1F":"circuit intermittent","21":"signal amplitude < minimum","22":"signal amplitude > maximum","23":"signal stuck low","24":"signal stuck high","25":"signal shape / waveform failure","26":"signal rate of change below threshold","27":"signal rate of change above threshold","28":"signal bias level out of range / zero adj. failure","29":"signal signal invalid","2F":"signal erratic","31":"no signal","32":"signal low time < minimum","33":"signal low time > maximum","34":"signal high time < minimum","35":"signal high time > maximum","36":"signal frequency too low","37":"signal frequency too high","38":"signal frequency incorrect","39":"incorrect has too few pulses","3A":"incorrect has too many pulses","41":"general checksum failure","42":"general memory failure","43":"special memory failure","44":"data memory failure","45":"program memory failure","46":"calibration / parameter memory failure","47":"watchdog / safety µC failure","48":"supervision software failure","49":"internal electronic failure","4A":"incorrect component installed","4B":"over temperature","51":"not programmed","52":"not activated","53":"deactivated","54":"missing calibration","55":"not configured","61":"signal calculation failure","62":"signal compare failure","63":"circuit / component protection time-out","64":"signal plausibility failure","65":"signal has too few transitions / events","66":"signal has too many transitions / events","67":"signal incorrect after event","68":"event information","71":"actuator stuck","72":"actuator stuck open","73":"actuator stuck closed","74":"actuator slipping","75":"emergency position not reachable","76":"wrong mounting position","77":"commanded position not reachable","78":"alignment or adjustment incorrect","79":"mechanical linkage failure","7A":"fluid leak or seal failure","7B":"low fluid level","81":"invalid serial data received","82":"alive / sequence counter incorrect / not updated","83":"value of signal protection calculation incorrect","84":"signal below allowable range","85":"signal above allowable range","86":"signal invalid","87":"missing message","88":"bus off","8F":"erratic","91":"parametric","92":"performance or incorrect operation","93":"no operation","94":"unexpected operation","95":"incorrect assembly","96":"component internal failure","97":"Component or sys. operation obstructed or blocked","98":"component or system over temperature"}},"EVC":{"dtc":{"10":"Stop light relay command","11":"DF152 REVERSING LAMP CIRCUIT","20":"DF015 SERVO PRESSURE SENSOR CIRCUITS","21":"Vaccum Sensor pressure 2","22":"DF003 BRAKE SERVO CIRCUIT LEAK","23":"DF009 VACUUM PUMP AGING COUNTER LIMIT 2","24":"vacuum pump electric","26":"DF013 BRAKE PEDAL POSITION SIGNAL","27":"Mastervac sensor power supply","60":"DF063 DRIVER'S DOOR SWITCH","62":"DF117 CHARGING PORT LATCH","63":"DF115 CARGO HATCH","70":"Shift Lock electrical control circuit","71":"gear lever","72":"Gear lever sensor - track 1","73":"Gear lever sensor - track 2","74":"Incoherence detection position park on levier between info du CMF and info levier reçue on le CAN","80":"DF095 CHARGING PLUG","81":"DF053 CHARGING PLUG","90":"Eco mode switch","101":"Thermistor Heater 1","102":"Thermistor Heater 2","103":"Thermistor Heater 3","104":"Thermistor Heater 4","105":"DF085 INTERIOR HEATER","106":"Heat water temperature sensor","120":"Heater electrical command circuit","121":"Heater request relay electrical command circuit","130":"Pulser relay power control circuit","140":"Feedback Heater Water pump of passenger compartment","141":"Heater water pump of passenger compartment","150":"High Voltage Supply of the Air Conditioning - Side Compressor","151":"Low Voltage Supply of the Air Conditioning - Side Computer","152":"DF086 COMPRESSOR AIR CONDITIONING","153":"Inverter of the Air Conditioning","154":"Electric motor of air conditioning","156":"Evaporator sensor for AC","160":"Heater Led control circuit","161":"Self preconditioning relay","170":"Pulser power supply relay","171":"DF067 FAN","180":"Battery conditioning system (AC, CTP),,","181":"Battery CTP/THP relay 1","182":"Battery CTP/THP relay 2","183":"Battery CTP/THP relay 3","184":"Battery HVAC relay electrovalve 1","185":"Battery HVAC relay electrovalve 2","186":"Battery HVAC fan out (command)","187":"Battery HVAC temperature sensor","188":"battery blower rotation speed feedback line","225":"DF036 RAIL 1 PEDAL POTENTIOMETER CIRCUIT","226":"DF037 ACCELERATOR PEDAL POSITION","301":"Underhood switch module (USM)","302":"DF088 COMPRESSOR AIR CONDITIONING","303":"DF187 LOCAL DATA NETWORK","304":"power electronic block","305":"DF071 COMMUNICATION CAN","306":"DF149 CONTROL UNIT","307":"Power electronic block data","308":"DF469 BMS SECURITY NOT RECOGNIZED BY HEVC","401":"power electronic block 01","402":"14v static converter in default (from CAN) 01","403":"EM inverter in default (from CAN) 01","404":"14v static converter in default (from CAN)","405":"DF089 STATIC CONVERTER 14V","406":"EM inverter in default (from CAN)","407":"DCDC C class default","410":"Battery Charger Block in Default (from CAN) 01","411":"DF042 COMMUNICATION CAN","412":"Battery Charger Bloc - High Voltage Side (from CAN)","413":"Main Voltage Supply of the Battery Charger Block (from CAN)","414":"DF076 ELECTRICAL SYSTEM CIRCUIT","415":"DF139 PEB/UPS MULTIPLEX TRANSMISSION MISSING","420":"DF610 MULTIPLEX SIGNAL BMS NOT PRESENT","430":"comfort interlock","431":"DF161 CHARGING PORT LATCH","432":"DF022 SAFETY LOCK","433":"DF023 HEATING RESISTANT LOCK","434":"DF024 AIR CONDITIONING COMPRESSOR LOCK","435":"DF075 SAFETY LOCK","440":"DF044 INSULATION","441":"DF062 INSULATION","442":"DF150 INSULATION","443":"Insulation Clim","450":"Power latch main relay operating","460":"Engine Coolant Temperature Sensor","461":"Cooling valve 1 control circuit","462":"DF026 WATER PUMP REGULATION WHILE DRIVING","463":"DF027 WATER PUMP CONTROL WHILE DRIVING","464":"Feedback load mode water pump","465":"Load mode water pump","467":"PAC box","468":"Peltier fan request electrical command circuit","469":"Peltier external fan","470":"DF030 DRIVE BATTERY TRANSMITTER CAN SIGNAL","471":"DF109 TEMP. DRIVE BATTERY COOLING CIRCUIT","472":"Cooling valve 2 control circuit","473":"AC - Heat pump circuit temperature sensor 1 (managed by PAC system)","474":"AC - Heat pump circuit temperature sensor 2 (managed by PAC system)","475":"AC - Heat pump circuit valve 1 (managed by PAC system)","476":"AC - Heat pump circuit Valve 2 (managed by PAC system)","480":"DF031 DRIVE BATTERY RELAY CIRCUIT","481":"DF055 DRIVE BATTERY RELAY CIRCUIT","482":"DF056 DRIVE BATTERY RELAY CIRCUIT","483":"DF057 DRIVE BATTERY RELAY CIRCUIT","485":"DF058 DRIVE BATTERY RELAY CIRCUIT","486":"DF068 DRIVE BATTERY RELAY CIRCUIT","490":"Battery high voltage lock","491":"Battery high voltage lock loop 1","492":"Battery high voltage lock loop 2","495":"DF066 TEMPERATURE SENSOR CAN SIGNAL","500":"No ETS Sleeping that leads to a flat lead 12V battery","502":"Battery temperature sensors","503":"Mastervac Voltage supply","504":"DF111 CONFORMITY INFORMATION BRAKE CONTACT","510":"State of function (SOF) of 14V battery","511":"14V Battery current sensor","512":"pulse box","513":"14V Battery heat relay","525":"DF020 MONITORING INPUTS REGULATOR FUNCTION","530":"DF079 COOLANT PRESSURE SENSOR CIRCUIT","560":"DF124 EMPTY 12V BATTERY","564":"DF016 REGULATOR/SPEED LIMITER FUNCTION","571":"Closed Brake Sensor","574":"Cruise Control/Speed ​​Limiter - Displayed Speed","575":"DF017 CRUISE CONTROL BUTTON","601":"DF032 PERFORMANCE ELECTRIC MOTOR","606":"DF045 CONTROL UNIT","610":"DF046 ENGINE TORQUE INFORMATION","641":"DF047 SUPPLY VOLTAGE NO. 1 THE GIVER","651":"DF048 SUPPLY VOLTAGE NO. 2 THE GIVER","657":"DF178 POWER RELAY CONTROL CIRCUIT","703":"DF049 INFORMATION BRAKE LIGHT SWITCH","833":"Beginning of Clutch Pedal Move Switch","1525":"DF018 MATCH MULTIPLEX SIGNALS CRUISE CONTROL","1654":"Communication with Aribag Control module","1655":"airbag data further to a crash","2120":"DF050 RAIL 2 PEDAL POTENTIOMETER CIRCUIT","030A":"DF119 COMMUNICATION CAN","042F":"DF140 LOCK BCB","043F":"DF192 LOCK","046A":"Peltier internal fan","046B":"Feedback from Peltier external fan","046C":"Feedback from Peltier internal fan","046D":"Peltier request relay electrical command circuit","046E":"Peltier temperature","047E":"Peltier Cells","04A0":"DF208 DRIVE BATTERY CHARGE","04A1":"Power Line Gateway","04B1":"DF110 CIRCUIT TEMPERATURE SENSOR","04B2":"DF210 TEMPERATURE SENSOR CIRCUIT CHARGER 1","04B3":"DF167 LEAKAGE CURRENT","04B4":"DF142 CIRCUIT. CONTACT SW. LEVER POSITION","04B5":"DF105 TEMP. DRIVE BATTERY COOLING CIRCUIT","04B6":"DF087 HEATER CONNECTION","04B7":"MVAC leakage detection with pump off","04B8":"MVAC leakage detection with pump on","04B9":"MVAC low level differential pressure","04BA":"Mastervac vacuum pump command open circuit","04BB":"MVAC pump life time G1 fail","04BC":"MVAC pump life time G2 fail","04BD":"DC charging relays","04BE":"Pressure Sensor 1 command","04BF":"Pressure sensor 1 fault","04C0":"Pressure sensor 2 command","04C1":"Pressure sensor 2 fault","04C2":"Incoherecy between operating type request send by EVC and Operating type status received from BMS","04C5":"Open circuit of air flaps_ Short circuit to ground of air flaps_ Short circuit of air flaps","060A":"DF128 PATH CONTROL","060B":"DF060 CONTROL UNIT","060C":"DF209 ESP FUNCTION","160C":"DF061 CONTROL UNIT","C103":"Communication With Gear Shift Control Module (Shifter)","C121":"Communication With ABS/ESP Control Module (safety)","C122":"Communication With ABS/ESP Control Module","C123":"Front Collision Warning","C129":"Communication With Brake System Control Module","C140":"Communication With Body Control Module","C146":"Communication With Gateway 'A' (BIC)","C155":"Communication With Instrument Panel Cluster (IPC) Control Module","C164":"Communication With Climate Control ECU Module","C198":"Communication With Telematic Control Module","C199":"Communication with Energy Management Module","C19A":"Communication with CSHV Unit (Dedicated for Crash when APC is off for daimler application)","C19B":"Communication with LBC8 Unit","C19C":"Safety mode 1 received from BMS","C415":"Invalid Data Received From Anti-Lock Brake System Control Module","C418":"Invalid data received from uncoupled brake pedal control module"},"test":{"00":"Device and failure type ODB codding","01":"General Electrical Failure","02":"General signal failure","03":"FM (Frequency Modulated) / PWM (Pulse Width Modulated) Failures","04":"System Internal Failures","05":"System Programming Failures","06":"Algorithm Based Failures","07":"Mechanical Failures","08":"Bus Signal / Message Failures","09":"Component Failures","0A":"Not compatible","11":"circuit short to ground","12":"circuit short to battery","13":"circuit open","14":"circuit short to ground or open","15":"circuit short to battery or open","16":"circuit voltage below threshold","17":"circuit voltage above threshold","18":"circuit current below threshold","19":"circuit current above threshold","1A":"circuit resistance below threshold","1B":"circuit resistance above threshold","1C":"circuit voltage out of range","1D":"circuit current out of range","1E":"circuit resistance out of range","1F":"circuit intermittent","20":"test","21":"signal amplitude < minimum","22":"signal amplitude > maximum","23":"signal stuck low","24":"signal stuck high","25":"signal shape / waveform failure","26":"signal rate of change below threshold","27":"signal rate of change above threshold","28":"signal bias level out of range / zero adjustment failure","29":"signal signal invalid","2F":"signal erratic","31":"no signal","32":"signal low time < minimum","33":"signal low time > maximum","34":"signal high time < minimum","35":"signal high time > maximum","36":"signal frequency too low","37":"signal frequency too high","38":"signal frequency incorrect","39":"incorrect has too few pulses","3A":"incorrect has too many pulses","41":"general checksum failure","42":"general memory failure","43":"special memory failure","44":"data memory failure","45":"program memory failure","46":"calibration / parameter memory failure","47":"watchdog / safety µC failure","48":"supervision software failure","49":"internal electronic failure","4A":"incorrect component installed","4B":"over temperature","51":"not programmed","52":"not activated","53":"deactivated","54":"missing calibration","55":"not configured","61":"signal calculation failure","62":"signal compare failure","63":"circuit / component protection time-out","64":"signal plausibility failure","65":"signal has too few transitions / events","66":"signal has too many transitions / events","67":"signal incorrect after event","68":"event information","71":"actuator stuck","72":"actuator stuck open","73":"actuator stuck closed","74":"actuator slipping","75":"emergency position not reachable","76":"wrong mounting position","77":"commanded position not reachable","78":"alignment or adjustment incorrect","79":"mechanical linkage failure","7A":"fluid leak or seal failure","7B":"low fluid level","81":"invalid serial data received","82":"alive / sequence counter incorrect / not updated","83":"value of signal protection calculation incorrect","84":"signal below allowable range","85":"signal above allowable range","86":"signal invalid","87":"missing message","88":"bus off","8F":"erratic","91":"parametric","92":"performance or incorrect operation","93":"no operation","94":"unexpected operation","95":"incorrect assembly","96":"component internal failure","97":"Component or system operation obstructed or blocked","98":"component or system over temperature","F1":"Safety Case 1","F2":"Safety Case 2","F3":"Multiple Failure","F4":"Temperature too Low","F5":"Negative Loop Error","F6":"Positive Loop Error","F7":"Initialisation not valid","F8":"Overspeed","F9":"Limp Home","FA":"Specific Supplier","FB":"-","FC":"--","FD":"Drift low","FE":"Drift  high"}}};
+// UUIDs de servicio BLE de adaptadores ELM327 conocidos (Vgate iCar Pro / IOS-Vlink, vLinker, OBDLink CX, clones HM-10, Nordic UART, Kiwi…)
+const BLE_SERVICES = [
+  '000018f0-0000-1000-8000-00805f9b34fb', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2', '0000fff0-0000-1000-8000-00805f9b34fb',
+  '0000ffe0-0000-1000-8000-00805f9b34fb', '0000ffe5-0000-1000-8000-00805f9b34fb', '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+  '6e400001-b5a3-f393-e0a9-e50e24dcca9e', 'b2e7d564-c077-404e-9d29-b547f4512dde', '0000abf0-0000-1000-8000-00805f9b34fb',
+];
+
+// ───────────────────────────── Utilidades UI ─────────────────────────────
+const $ = (id) => document.getElementById(id);
+const fmt = (v, f = 1) => (v === null || v === undefined || Number.isNaN(v)) ? '–' : Number(v).toLocaleString('es-CL', { minimumFractionDigits: f, maximumFractionDigits: f });
+const fmtDate = (iso) => { const d = new Date(iso); const p = (n) => String(n).padStart(2, '0'); return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let toastT = null;
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2200); }
+const LOG_MAX = 600; const logLines = [];
+function log(txt, cls = '') { const line = { t: new Date(), txt, cls }; logLines.push(line); if (logLines.length > LOG_MAX) logLines.shift(); const box = $('logBox'); const el = document.createElement('div'); if (cls) el.className = cls; el.textContent = line.t.toTimeString().slice(0, 8) + ' ' + txt; box.appendChild(el); while (box.childElementCount > LOG_MAX) box.removeChild(box.firstChild); box.scrollTop = box.scrollHeight; }
+async function copyText(txt, label) {
+  try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(txt); toast((label || 'Texto') + ' copiado'); return true; } } catch (e) { /* cae al respaldo */ }
+  const ta = $('exportArea'); ta.hidden = false; ta.value = txt; ta.focus(); ta.select(); toast('Selecciona el texto y cópialo'); return false;
+}
+function setConn(state, text) { const p = $('connPill'); p.className = 'pill ' + state; $('connText').textContent = text; }
+
+// ───────────────────────────── Transporte BLE ─────────────────────────────
+const DEVICE_KEY = 'revisaelauto_ev_device';
+const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
+class BleTransport {
+  constructor() { this.device = null; this.writeChar = null; this.notifyChar = null; this.onData = null; this.onDisconnect = null; this.name = ''; }
+  async connect() {
+    if (!navigator.bluetooth) throw new Error('Este navegador no expone Bluetooth. Abre la página en Bluefy (iPhone) o Chrome (Android).');
+    const showAll = $('optAllDevices').checked; const userPrefix = $('inBleName').value.trim();
+    let device = null; let remembered = null;
+    try { remembered = JSON.parse(localStorage.getItem(DEVICE_KEY) || 'null'); } catch (e) { remembered = null; }
+    // 1) adaptador ya usado con éxito: se reconecta sin pasar por la lista (si el navegador lo permite)
+    if (!showAll && remembered && typeof navigator.bluetooth.getDevices === 'function') {
+      try { const known = await navigator.bluetooth.getDevices(); device = known.find(d => d.id === remembered.id) || null; if (device) log('Reconectando al adaptador recordado ' + (device.name || remembered.name || device.id)); } catch (e) { device = null; }
+    }
+    // 2) lista de dispositivos: solo los que anuncian el servicio de un adaptador OBD (18F0 = Vgate iCar Pro / IOS-Vlink), o el nombre indicado
+    if (!device) {
+      const filters = [{ services: ['000018f0-0000-1000-8000-00805f9b34fb'] }, { services: ['e7810a71-73ae-499d-8c15-faa9aef0c3f2'] }, { services: ['49535343-fe7d-4ae5-8fa9-9fafd205e455'] }];
+      if (userPrefix) filters.unshift({ namePrefix: userPrefix });
+      const req = showAll ? { acceptAllDevices: true, optionalServices: BLE_SERVICES } : { filters, optionalServices: BLE_SERVICES };
+      log(showAll ? 'Buscando todos los dispositivos BLE' : 'Buscando adaptadores OBD (servicio 18F0 / e7810a71 / 49535343' + (userPrefix ? ' o nombre «' + userPrefix + '»' : '') + ')');
+      try { device = await navigator.bluetooth.requestDevice(req); } catch (e) { if (/NotFoundError|cancel|no device|not found/i.test(e.name + ' ' + e.message)) throw new Error('No elegiste ningún dispositivo o la lista salió vacía. Con el adaptador enchufado al OBD y el auto encendido, vuelve a intentar; si sigue vacía, marca «Mostrar todos los dispositivos».'); throw e; }
+    }
+    this.device = device; this.name = device.name || ('adaptador ' + String(device.id || '').slice(0, 8));
+    device.addEventListener('gattserverdisconnected', () => { log('BLE desconectado', 'err'); if (this.onDisconnect) this.onDisconnect(); });
+    log('Dispositivo elegido: ' + (device.name || 'sin nombre') + ' · id ' + device.id);
+    setConn('warn', 'Conectando GATT…');
+    let server; try { server = await withTimeout(device.gatt.connect(), 15000, 'no aceptó la conexión en 15 s'); } catch (e) { throw new Error(`El dispositivo ${this.name} ${e.message}. Si no es el adaptador, prueba con el siguiente de la lista.`); }
+    log('GATT conectado: ' + (server.connected ? 'sí' : 'estado desconocido'));
+    setConn('warn', 'Buscando servicios…');
+    let found = null; let timeouts = 0;
+    for (const uuid of BLE_SERVICES) {
+      let svc; try { svc = await withTimeout(server.getPrimaryService(uuid), 5000, 'timeout'); } catch (e) { if (e.message === 'timeout') { log('getPrimaryService ' + uuid.slice(0, 8) + ': sin respuesta en 5 s', 'err'); if (++timeouts >= 2) break; } continue; }
+      log('Servicio ' + uuid.slice(0, 8) + ' presente');
+      found = await this._pick(svc); if (found) break;
+    }
+    if (!found && server.getPrimaryServices) {
+      let list = []; try { list = await withTimeout(server.getPrimaryServices(), 6000, 'timeout'); log('Servicios enumerados: ' + list.map(s => s.uuid.slice(0, 8)).join(', ')); } catch (e) { log('getPrimaryServices: ' + e.message, 'err'); }
+      for (const svc of list) { found = await this._pick(svc); if (found) break; }
+    }
+    if (!found) { try { device.gatt.disconnect(); } catch (e) { /* nada */ } throw new Error(`«${this.name}» no tiene el servicio de un adaptador OBD: no es el tuyo. Prueba con el siguiente de la lista. Truco: desenchufa el adaptador del OBD, vuelve a tocar Conectar y fíjate cuál desapareció; ese es.`); }
+    this.writeChar = found.w; this.notifyChar = found.n;
+    log(`BLE servicio ${found.svc} · escribe ${found.w.uuid.slice(0, 8)} · notifica ${found.n.uuid.slice(0, 8)}`);
+    const dec = new TextDecoder();
+    this.notifyChar.addEventListener('characteristicvaluechanged', (e) => { const v = e.target.value; const s = dec.decode(v.buffer ? new Uint8Array(v.buffer, v.byteOffset, v.byteLength) : v); if (this.onData) this.onData(s); });
+    setConn('warn', 'Activando notificaciones…');
+    try { await withTimeout(this.notifyChar.startNotifications(), 8000, 'timeout'); log('Notificaciones activas'); }
+    catch (e) {
+      log('startNotifications: ' + e.message + ' · intento escribir el CCCD a mano', 'err');
+      try { const d = await withTimeout(this.notifyChar.getDescriptor('00002902-0000-1000-8000-00805f9b34fb'), 4000, 'timeout'); const p = this.notifyChar.properties; await withTimeout(d.writeValue(new Uint8Array(p.notify ? [1, 0] : [2, 0])), 4000, 'timeout'); log('CCCD escrito a mano (' + (p.notify ? 'notify' : 'indicate') + ')'); }
+      catch (e2) { log('CCCD a mano: ' + e2.message + ' · sigo igual, el ELM dirá si llegan datos', 'err'); }
+    }
+  }
+  async _pick(svc) {
+    let chars = []; try { chars = await withTimeout(svc.getCharacteristics(), 6000, 'timeout'); } catch (e) { log('getCharacteristics ' + svc.uuid.slice(0, 8) + ': ' + e.message, 'err'); return null; }
+    let n = null, w = null;
+    for (const c of chars) { const p = c.properties; log(`  característica ${c.uuid.slice(0, 8)}: ${['read', 'write', 'writeWithoutResponse', 'notify', 'indicate'].filter(k => p[k]).join('/') || 'sin propiedades'}`); if (!n && (p.notify || p.indicate)) n = c; if (!w && (p.write || p.writeWithoutResponse)) w = c; }
+    return (n && w) ? { n, w, svc: svc.uuid.slice(0, 8) } : null;
+  }
+  async write(str) {
+    const bytes = new TextEncoder().encode(str);
+    const c = this.writeChar; const noResp = c.properties.writeWithoutResponse && typeof c.writeValueWithoutResponse === 'function';
+    for (let i = 0; i < bytes.length; i += 20) {
+      const chunk = bytes.slice(i, i + 20);
+      if (noResp) await c.writeValueWithoutResponse(chunk); else if (typeof c.writeValueWithResponse === 'function') await c.writeValueWithResponse(chunk); else await c.writeValue(chunk);
+    }
+  }
+  async disconnect() { try { if (this.device && this.device.gatt.connected) this.device.gatt.disconnect(); } catch (e) { /* nada */ } }
+}
+// Simulador ELM327 + ECUs del Spring para el modo demo y las pruebas.
+class FakeTransport {
+  constructor() { this.onData = null; this.name = 'Simulador IOS-Vlink'; this.hdr = '7BB'; this.echo = true; this.headers = false; this.sp = '6';
+    const seed = Math.floor(Math.random() * 1000);
+    this.cells = Array.from({ length: 72 }, (_, i) => 3.912 + Math.sin(i * 1.7 + seed) * 0.004 + (i === 40 ? -0.019 : 0) + (i === 12 ? 0.006 : 0));
+    this.temps = Array.from({ length: 12 }, (_, i) => 24.5 + Math.cos(i + seed) * 0.6);
+  }
+  async connect() { }
+  async disconnect() { }
+  async write(str) { const cmd = str.replace(/\r/g, '').trim(); let out = ''; if (this.echo) out += cmd + '\r';
+    const up = cmd.toUpperCase();
+    if (up.startsWith('AT')) {
+      if (up === 'ATWS' || up === 'ATZ') out += '\r\rELM327 v2.3\r'; else if (up === 'ATE0') { this.echo = false; out = cmd + '\rOK\r'; } else if (up === 'ATRV') out += '13.4V\r'; else if (up === 'ATI') out += 'ELM327 v2.3\r'; else if (up === 'ATDPN') out += this.sp + '\r'; else if (up.startsWith('ATSP')) { this.sp = up.slice(4); out += 'OK\r'; } else if (up.startsWith('ATSH')) { this.hdr = up.slice(4); out += 'OK\r'; } else if (up === 'ATH1') { this.headers = true; out += 'OK\r'; } else if (up === 'ATH0') { this.headers = false; out += 'OK\r'; } else out += 'OK\r';
+    } else out += this.respond(up.replace(/\s/g, ''));
+    out += '\r>';
+    await new Promise(r => setTimeout(r, 8));
+    for (let i = 0; i < out.length; i += 20) { const piece = out.slice(i, i + 20); if (this.onData) this.onData(piece); await new Promise(r => setTimeout(r, 1)); }
+  }
+  frames(payloadHex, resId) { // arma tramas ISO-TP como las imprime el ELM con CAF0 (relleno AA como Renault)
+    const bytes = payloadHex.length / 2; const lines = [];
+    if (bytes <= 7) lines.push('0' + bytes.toString(16).toUpperCase() + payloadHex.padEnd(14, 'A'));
+    else { lines.push('1' + bytes.toString(16).toUpperCase().padStart(3, '0') + payloadHex.slice(0, 12)); let rest = payloadHex.slice(12), n = 1; while (rest.length) { lines.push('2' + n.toString(16).toUpperCase() + rest.slice(0, 14).padEnd(14, 'A')); rest = rest.slice(14); n = (n + 1) & 15; } }
+    return lines.map(l => (this.headers ? resId : '') + l).join('\r') + '\r';
+  }
+  hex(v, bytes) { return Math.max(0, Math.round(v)).toString(16).toUpperCase().padStart(bytes * 2, '0').slice(-bytes * 2); }
+  respond(req) {
+    const sid = req.slice(2, 4); const body = req.slice(4); const h = this.hdr;
+    // El simulador imita un Spring 2025: BMS y VCM en 29 bits, tablero y carrocería en 11 bits. En 79B/7E4 (11 bits) nadie contesta.
+    const ecu = { 'DADBF1': 'LBC', 'DADAF1': 'EVC', 'DADEF1': 'BCB', 'DADFF1': 'INV', '743': 'TDB', '745': 'UCH', '744': 'HVAC', '752': 'SRS', 'DB33F1': 'ALL' }[h];
+    if (!ecu) return '';
+    const resId = { LBC: '18DAF1DB', EVC: '18DAF1DA', BCB: '18DAF1DE', INV: '18DAF1DF', TDB: '763', UCH: '765', HVAC: '764', SRS: '772' }[ecu] || '';
+    const F = (hex) => this.frames(hex, resId); const neg = (nrc) => F('7F' + sid + nrc);
+    if (ecu === 'ALL') { if (sid === '10') return ['18DAF1DB', '18DAF1DA', '18DAF1DE', '18DAF1DF'].map(id => this.frames('50' + body.slice(0, 2) + '003201F4', id)).join(''); if (sid === '01') return this.frames('4100000001', '18DAF1DA'); return ''; }
+    if (sid === '10') return F('50' + body.slice(0, 2) + '003201F4');
+    this.cleared = this.cleared || {};
+    if (sid === '14') { this.cleared[ecu] = true; return F('54'); }
+    if (sid === '19') { if (this.cleared[ecu]) return F('5902FF'); if (ecu === 'LBC') return F('5902FF' + '1B0D' + '11' + '08'); if (ecu === 'HVAC') return F('5902FF' + '9480' + '11' + '2C'); if (ecu === 'UCH') return F('5902FF' + 'C073' + '87' + '09'); return F('5902FF'); }
+    if (sid === '22') {
+      const did = body.slice(0, 4); const H = (hex) => F('62' + did + hex);
+      const ids = { 'F187': Buffer_from(ecu === 'LBC' ? '295B07938R' : ecu === 'EVC' ? '237Q00843R' : ecu === 'TDB' ? '248R00321R' : '280A1' + ecu), 'F194': Buffer_from(ecu === 'LBC' ? 'A5103' : 'B2240'), 'F18A': Buffer_from(ecu === 'LBC' ? 'CATL' : 'VALEO'), 'F195': Buffer_from('BMS 1.08 2024-03-18') };
+      if (ids[did]) return H(ids[did]);
+      if (ecu === 'LBC') {
+        const sumV = this.cells.reduce((a, b) => a + b, 0); const max = Math.max(...this.cells), min = Math.min(...this.cells);
+        const t = (c) => this.hex(c / 0.0625 + 640, 2);
+        const m = { '9001': this.hex(64.5 / 0.5 + 6, 1), '9002': this.hex(6420, 2), '9003': this.hex(9874, 2), '9005': this.hex(sumV * 10, 2), '9006': this.hex(sumV * 1024, 4), '9007': this.hex(max * 1024, 2), '9008': this.hex(this.cells.indexOf(max) + 1, 1), '9009': this.hex(min * 1024, 2), '900A': this.hex(this.cells.indexOf(min) + 1, 1), '900D': this.hex(48000 - 1.3 / 0.025, 4), '900E': this.hex(3500, 2), '900F': this.hex(6200, 2), '9011': this.hex(13.4 * 1024, 2), '9012': t(24.6), '9013': t(23.9), '9014': t(25.3), '9018': this.hex(2980, 2), '9019': '00', '901A': '02',
+          '901B': Buffer_from('CMFA27KWH0123456789AB'), '91C1': this.hex(1650 * 60, 3), '91C6': this.hex(31.5 / 0.25, 2), '91C7': this.hex(33.25 / 0.25, 2), '91C8': this.hex(15870, 3), '91CF': this.hex(0x80000000 + 48213 / 0.03125, 4), '91BC': this.hex(961, 2), '91BD': this.hex(958, 2), '9243': this.hex(9876543, 4), '9245': this.hex(8765432, 4), '9247': this.hex(1234567, 4), '9210': this.hex(212, 2), '9215': this.hex(640, 2), '9211': this.hex(87, 2), '924F': this.hex(0x80000000 + 36 * 1024, 4), '9250': this.hex(0x80000000 + 412 * 1024, 4), '912B': '00'.repeat(32) };
+        if (m[did]) return H(m[did]);
+        const dn = parseInt(did, 16);
+        for (let n = 1; n <= 72; n++) if (parseInt(cellDid(n), 16) === dn) return H(this.hex(this.cells[n - 1] * 1024, 2));
+        for (let n = 73; n <= 96; n++) if (parseInt(cellDid(n), 16) === dn) return H('0000'); // como el BMS real del Spring 2025: DID presente, celda inexistente
+        for (let n = 1; n <= 12; n++) if (parseInt(tempDid(n), 16) === dn) return H(t(this.temps[n - 1]));
+        for (let n = 13; n <= 16; n++) if (parseInt(tempDid(n), 16) === dn) return H(t(87)); // posiciones sin sensor, como en el Spring 2025 real
+        return neg('31');
+      }
+      if (ecu === 'EVC') { const m = { '216C': this.hex(0x80000000 + 4821300, 4), '2005': this.hex(1340, 2), '20BE': this.hex(64.5 / 0.02, 2), '21CD': this.hex(64, 2), '303D': this.hex(8000, 2), '303F': this.hex(24 + 40, 1), '3044': this.hex(300, 2), '300F': this.hex(7.4 / 0.025, 2), '21CC': this.hex(2000 - 1.25 / 0.25, 2), '21DF': this.hex(32767 + 12, 2), '20DE': this.hex(2730 + 180, 2), '3451': this.hex(154, 2), '2B85': '01', '2003': '0000' }; return m[did] ? H(m[did]) : neg('31'); }
+      if (ecu === 'TDB') { if (did === 'F190') return H(Buffer_from('VF1RBG000TU288575')); return neg('31'); }
+      return neg('31');
+    }
+    return neg('11');
+  }
+}
+function Buffer_from(s) { return Array.from(s).map(c => c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')).join(''); }
+
+// ───────────────────────────── Capa ELM327 / ISO-TP / UDS ─────────────────────────────
+class Elm {
+  constructor(transport) { this.tr = transport; this.buf = ''; this.waiter = null; this.ecu = null; this.addr = null; this.mode = null; this.resolved = {}; this.headersOn = false; this.busy = false; this.stats = { ok: 0, fail: 0 }; this.version = ''; this.voltage = ''; this.flowCtl = true;
+    this.rxBytes = 0; this.debugRx = false;
+    transport.onData = (s) => { this.rxBytes += s.length; if (this.debugRx) log('  rx ' + JSON.stringify(s)); this.buf += s; if (this.waiter && this.buf.includes('>')) { const w = this.waiter; this.waiter = null; clearTimeout(w.timer); const idx = this.buf.indexOf('>'); const out = this.buf.slice(0, idx); this.buf = this.buf.slice(idx + 1); w.resolve(out); } };
+  }
+  async cmd(c, timeout = 2500) {
+    if (this.busy) throw new Error('ELM ocupado');
+    this.busy = true; this.buf = '';
+    try {
+      log('> ' + c, 'tx');
+      const p = new Promise((resolve, reject) => { this.waiter = { resolve, timer: setTimeout(() => { this.waiter = null; reject(new Error('timeout ' + c)); }, timeout) }; });
+      await this.tr.write(c + '\r');
+      let out = await p;
+      out = out.replace(/\0/g, '').trim();
+      const echoIdx = out.toUpperCase().indexOf(c.toUpperCase()); if (echoIdx === 0) out = out.slice(c.length).trim();
+      log('< ' + out.replace(/\r/g, ' ⏎ '));
+      return out;
+    } finally { this.busy = false; }
+  }
+  async recover() { try { this.busy = false; this.buf = ''; await this.tr.write('x\r'); await new Promise(r => setTimeout(r, 400)); this.buf = ''; } catch (e) { /* nada */ } }
+  async init() {
+    this.debugRx = true;
+    let v = ''; try { v = await this.cmd('ATWS', 3000); } catch (e) { log('ATWS sin prompt: ' + e.message, 'err'); await this.recover(); try { v = await this.cmd('ATZ', 5000); } catch (e2) { log('ATZ sin prompt: ' + e2.message, 'err'); v = ''; } }
+    if (!v && !this.rxBytes) { try { v = await this.cmd('ATI', 3000); } catch (e) { v = ''; } }
+    this.debugRx = false;
+    if (!v) throw new Error('El adaptador no responde a ATWS/ATZ ' + (this.rxBytes ? `(llegaron ${this.rxBytes} bytes pero sin el prompt «>»)` : '(no llegó ningún byte: las notificaciones BLE no están funcionando con este adaptador)'));
+    this.version = (v.split(/\r/).map(s => s.trim()).filter(Boolean).pop() || v).replace(/[^\x20-\x7e]/g, '');
+    for (const c of ['ATE0', 'ATS0', 'ATH0', 'ATL0', 'ATAL', 'ATCAF0', 'ATFCSH77B', 'ATFCSD300000', 'ATFCSM1', 'ATSP6']) {
+      let r = ''; for (let i = 0; i < 2 && !/OK/i.test(r); i++) { try { r = await this.cmd(c); } catch (e) { await this.recover(); } }
+      if (!/OK/i.test(r)) { if (c.startsWith('ATFCS')) { this.flowCtl = false; log('Sin control de flujo automático: respuestas largas pueden fallar', 'err'); } else if (c !== 'ATAL') throw new Error(`El adaptador rechazó ${c} (${r || 'sin respuesta'})`); }
+    }
+    try { this.voltage = (await this.cmd('ATRV')).replace(/\r/g, ' ').trim(); } catch (e) { this.voltage = ''; }
+    this.ecu = null; this.addr = null; this.mode = 11; this.resolved = {}; this.headersOn = false;
+  }
+  // Petición a una dirección arbitraria (módulos descubiertos)
+  async requestAt(a, hex, timeout = 2500) {
+    if (!this.addr || this.addr.req !== a.req || this.addr.mode !== a.mode) await this.applyAddr(a);
+    this.ecu = null;
+    return this._requestAt(hex, timeout);
+  }
+  async readDidAt(a, did, minBytes = 1) {
+    const r = await this.requestAt(a, '22' + did);
+    if (!r.ok) return r;
+    const d = r.data; if (d.length < 3 || ((d[1] << 8) | d[2]) !== parseInt(did, 16)) return { ok: false, err: 'eco de DID incorrecto', raw: r.raw };
+    const payload = d.slice(3); if (payload.length < minBytes) return { ok: false, err: 'respuesta corta', raw: r.raw };
+    return { ok: true, data: payload, raw: r.raw, hex: payload.map(x => x.toString(16).toUpperCase().padStart(2, '0')).join('') };
+  }
+  // Aplica cabeceras/filtro para una dirección concreta: {mode: 11|29, req, res}
+  async applyAddr(a) {
+    if (this.mode !== a.mode) { await this.cmd(a.mode === 29 ? 'ATSP7' : 'ATSP6'); if (a.mode === 29) await this.cmd('ATCP18'); this.mode = a.mode; }
+    await this.cmd('ATSH' + a.req);
+    const r = await this.cmd('ATCRA' + a.res);
+    if (!/OK/i.test(r)) { if (!this.headersOn) { await this.cmd('ATH1'); this.headersOn = true; log('ATCRA no soportado: filtro por cabecera en software'); } }
+    await this.cmd('ATFCSH' + (a.mode === 29 ? '18' + a.req : a.req));
+    this.addr = a; this.ecu = null;
+  }
+  // Resuelve en qué dirección responde una ECU (29 bits primero en la arquitectura Renault nueva, 11 bits en la antigua)
+  async setEcu(name) {
+    if (this.ecu === name) return; const e = ECUS[name];
+    if (!this.resolved) this.resolved = {};
+    if (this.resolved[name] === null) throw new Error(`${e.name} no responde en ninguna dirección conocida`);
+    if (this.resolved[name]) { await this.applyAddr(this.resolved[name]); this.ecu = name; return; }
+    const saved = loadAddrCache()[name]; const cands = [...e.candidates]; if (saved) { const i = cands.findIndex(c => c.req === saved.req && c.mode === saved.mode); if (i > 0) cands.unshift(cands.splice(i, 1)[0]); }
+    for (const a of cands) {
+      await this.applyAddr(a);
+      let out = ''; try { out = await this.cmd('021003', 2500); } catch (err) { await this.recover(); out = ''; }
+      const lines = out.split(/[\r\n]+/).map(s => s.trim()).filter(Boolean); const got = lines.some(l => /^[0-9A-F]{4,}$/i.test(this.headersOn ? l.slice(a.mode === 29 ? 8 : 3) : l));
+      if (got) { this.resolved[name] = a; this.ecu = name; log(`${e.name}: responde en ${a.mode} bits (${a.req} → ${a.res})`); saveAddrCache(name, a); return; }
+      log(`${e.name}: sin respuesta en ${a.mode} bits (${a.req})`);
+    }
+    this.resolved[name] = null; throw new Error(`${e.name} no responde en ninguna dirección conocida (${e.candidates.map(c => c.mode + 'b ' + c.req).join(', ')})`);
+  }
+  // Envía una petición UDS (hex sin PCI) y devuelve {ok, data(bytes), nrc, raw}
+  async request(ecuName, hex, timeout = 2500) {
+    try { await this.setEcu(ecuName); } catch (e) { this.stats.fail++; return { ok: false, err: e.message, raw: '' }; }
+    return this._requestAt(hex, timeout);
+  }
+  async _requestAt(hex, timeout = 2500) {
+    const n = hex.length / 2; const prefixLen = this.addr.mode === 29 ? 8 : 3;
+    const pci = n <= 7 ? ('0' + n.toString(16)) : null; if (!pci) throw new Error('petición larga no soportada');
+    let out; try { out = await this.cmd((pci + hex).toUpperCase(), timeout); } catch (e) { await this.recover(); this.stats.fail++; return { ok: false, err: 'timeout', raw: '' }; }
+    const lines = out.split(/[\r\n]+/).map(s => s.trim().replace(/\s+/g, '')).filter(Boolean);
+    const hexLines = []; let status = '';
+    for (let l of lines) {
+      if (/^[0-9A-Fa-f]+$/.test(l)) { if (this.headersOn) { if (!l.toUpperCase().startsWith(this.addr.res.toUpperCase())) continue; l = l.slice(prefixLen); } hexLines.push(l.toUpperCase()); }
+      else status = status ? status + ' ' + l : l;
+    }
+    if (!hexLines.length) { this.stats.fail++; return { ok: false, err: status || 'sin datos', raw: out }; }
+    const msgs = []; let i = 0;
+    while (i < hexLines.length) {
+      const l = hexLines[i]; const t = l[0];
+      if (t === '0') { const len = parseInt(l[1], 16); msgs.push(l.slice(2, 2 + len * 2)); i++; }
+      else if (t === '1') { const len = parseInt(l.slice(1, 4), 16); let data = l.slice(4); i++; let seq = 1; while (data.length < len * 2 && i < hexLines.length && hexLines[i][0] === '2') { if (parseInt(hexLines[i][1], 16) !== seq) { log('ISO-TP fuera de secuencia: ' + hexLines[i], 'err'); } data += hexLines[i].slice(2); seq = (seq + 1) & 15; i++; } msgs.push(data.slice(0, len * 2)); }
+      else { i++; }
+    }
+    const sidReq = hex.slice(0, 2).toUpperCase(); const sidPos = (parseInt(sidReq, 16) + 0x40).toString(16).toUpperCase().padStart(2, '0');
+    let neg = null;
+    for (const m of msgs) {
+      if (m.startsWith(sidPos)) { this.stats.ok++; const bytes = []; for (let k = 0; k < m.length; k += 2) bytes.push(parseInt(m.slice(k, k + 2), 16)); return { ok: true, data: bytes, raw: m }; }
+      if (m.startsWith('7F')) neg = m.slice(4, 6);
+    }
+    this.stats.fail++;
+    return { ok: false, err: neg ? ('NRC ' + neg + ' ' + (NRC[neg] || '')) : ('respuesta inesperada ' + msgs.join('/')), nrc: neg, raw: out };
+  }
+  async readDid(ecuName, did, minBytes = 1) {
+    const r = await this.request(ecuName, '22' + did);
+    if (!r.ok) return r; // incluye nrc cuando hubo respuesta negativa
+    const d = r.data; if (d.length < 3 || ((d[1] << 8) | d[2]) !== parseInt(did, 16)) return { ok: false, err: 'eco de DID incorrecto', raw: r.raw };
+    const payload = d.slice(3); if (payload.length < minBytes) return { ok: false, err: 'respuesta corta', raw: r.raw };
+    return { ok: true, data: payload, raw: r.raw, hex: payload.map(x => x.toString(16).toUpperCase().padStart(2, '0')).join('') };
+  }
+}
+
+// ───────────────────────────── Escaneo ─────────────────────────────
+let transport = null, elm = null, cancelFlag = false, scanning = false, currentScan = null, wakeLock = null;
+function setLive(key, label, val) { let t = document.querySelector(`#liveTiles [data-k="${key}"]`); if (!t) { t = document.createElement('div'); t.className = 'tile'; t.dataset.k = key; t.innerHTML = `<div class="k">${esc(label)}</div><div class="v"></div>`; $('liveTiles').appendChild(t); } t.querySelector('.v').innerHTML = val; }
+async function runScan() {
+  if (!elm || scanning) return; scanning = true; cancelFlag = false; $('scanError').hidden = true; $('results').hidden = true; $('progressBox').hidden = false; $('liveTiles').innerHTML = ''; $('btnScan').disabled = true;
+  try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { wakeLock = null; }
+  const opts = { cells: $('optCells').checked, temps: $('optTemps').checked, ext: $('optExt').checked, evc: $('optEvc').checked, modules: $('optModules').checked };
+  const scan = { meta: { app: 'Escáner Batería EV · RevisaElAuto', version: '1.0', profile: PROFILE.id, startedAt: new Date().toISOString(), demo: transport instanceof FakeTransport, adapter: { name: transport.name, elm: elm.version, obdVoltage: elm.voltage } },
+    vehicle: { plate: $('inPlate').value.trim().toUpperCase(), kmManual: $('inKm').value ? Number($('inKm').value) : null, model: $('inModel').value.trim(), inspector: $('inInspector').value.trim(), notes: $('inNotes').value.trim() },
+    lbc: {}, ext: {}, id: {}, evc: {}, cells: [], temps: [], dtc: { LBC: null, EVC: null }, modules: [], raw: {}, errors: [], options: opts };
+  const total = LBC_DIDS.length + (opts.cells ? PROFILE.cells : 0) + (opts.temps ? 12 : 0) + (opts.ext ? LBC_EXT.length + LBC_ID.length : 0) + 1 + (opts.evc ? EVC_DIDS.length + 3 : 0) + (opts.modules ? MODULES_11.length + 16 : 0);
+  let done = 0; const t0 = Date.now();
+  const step = (txt) => { done++; $('progBar').style.width = Math.min(100, Math.round(done / total * 100)) + '%'; $('progText').textContent = txt; };
+  const rawKey = (ecu, did) => ecu + ':' + did;
+  const read = async (ecu, def, probe) => { if (cancelFlag) throw new Error('cancelado'); const r = await elm.readDid(ecu, def.did, def.min || 1); if (!r.ok && r.nrc) { elm.stats.fail--; if (!probe) scan.raw[rawKey(ecu, def.did)] = 'NRC ' + r.nrc; return null; } scan.raw[rawKey(ecu, def.did)] = r.ok ? r.hex : ('ERR ' + r.err); if (!r.ok) { scan.errors.push(`${ecu} ${def.did}: ${r.err}`); return null; } return r; };
+  try {
+    await elm.setEcu('LBC');
+    // sesión extendida (no es obligatoria en el Spring; si la rechaza, seguimos)
+    const ses = await elm.request('LBC', '1003'); scan.raw['LBC:1003'] = ses.ok ? ses.raw : 'ERR ' + ses.err;
+    let coreFails = 0;
+    for (const def of LBC_DIDS) {
+      step('BMS · ' + def.label);
+      const r = await read('LBC', def);
+      if (!r) { if (def.core || coreFails++ > 3) { if (def.core) throw new Error(`El BMS no entrega el SOH (DID 9003): ${scan.errors[scan.errors.length - 1]}. ¿Está el auto en Ready y el adaptador bien enchufado? Si persiste, usa «Probar qué ECU responden» en Avanzado.`); } continue; }
+      let v = def.dec(r.data); let note = null; if (def.temp) { note = v.alt ? 'alt' : (v.suspect ? 'suspect' : null); v = v.v; }
+      scan.lbc[def.key] = v; if (note) scan.lbc[def.key + 'Note'] = note;
+      if (def.key === 'soh') setLive('soh', 'SOH', fmt(v, 2) + '<small>%</small>');
+      if (def.key === 'socUser') setLive('soc', 'SOC', fmt(v, 1) + '<small>%</small>');
+      if (def.key === 'packV') setLive('packV', 'Pack', fmt(v, 1) + '<small>V</small>');
+      if (def.key === 'tAvg') setLive('temp', 'Temp. media', fmt(v, 1) + '<small>°C</small>');
+    }
+    if (opts.temps) {
+      // El BMS expone hasta 17 posiciones de sensor, pero el pack del Spring trae 12: las posiciones vacías devuelven un valor fijo fuera del
+      // rango mín–máx que el propio BMS reporta (9013/9014), así que se descartan por esa ventana.
+      const lo = scan.lbc.tMin != null ? scan.lbc.tMin - 2.5 : -45, hi = scan.lbc.tMax != null ? scan.lbc.tMax + 2.5 : 95; let fails = 0;
+      for (let n = 1; n <= 17 && fails < 2; n++) {
+        step(`Sensor de temperatura ${n}`); const r = await read('LBC', { did: tempDid(n), min: 2 }, n > 12);
+        if (!r) { if (n > 12) fails++; else fails += 0.5; continue; }
+        const t = decTemp(r.data);
+        if (t.v < lo || t.v > hi) { log(`Sensor ${n}: ${fmt(t.v, 1)} °C fuera de la ventana mín–máx del BMS (${fmt(lo, 1)}–${fmt(hi, 1)}): posición sin sensor`); scan.raw['LBC:' + tempDid(n)] += ' (sin sensor)'; if (n > 12) break; continue; }
+        scan.temps.push({ n, c: t.v, note: t.alt ? 'alt' : (t.suspect ? 'suspect' : null) });
+      }
+    }
+    if (opts.cells) {
+      let fails = 0;
+      for (let n = 1; n <= PROFILE.maxCellsProbe; n++) {
+        if (n > PROFILE.cells && (fails > 0 || scan.cells.length < PROFILE.cells)) break;
+        step(`Celda ${n} de ${PROFILE.cells}`);
+        const r = await read('LBC', { did: cellDid(n), min: 2 }, n > PROFILE.cells);
+        if (!r) { fails++; if (n > PROFILE.cells) break; continue; }
+        const mv = u16(r.data) / 1.024;
+        if (n > PROFILE.cells && mv < 500) { log(`Celda ${n}: ${fmt(mv, 0)} mV → el BMS tiene el DID pero la celda no existe; fin del mapa en ${scan.cells.length} celdas`); break; }
+        scan.cells.push({ n, mv: Math.round(mv * 10) / 10 });
+        if (n % 8 === 0) { const vals = scan.cells.map(c => c.mv); setLive('cells', 'Celdas', `${scan.cells.length}<small>Δ ${fmt(Math.max(...vals) - Math.min(...vals), 0)} mV</small>`); }
+      }
+    }
+    if (opts.ext) {
+      for (const def of LBC_EXT) { step('BMS · ' + def.label); const r = await read('LBC', def); if (r) scan.ext[def.key] = def.dec(r.data); }
+      for (const def of LBC_ID) { step('BMS · ' + def.label); const r = await read('LBC', def); if (r) scan.id[def.key] = def.dec(r.data); }
+    }
+    step('BMS · códigos de falla'); scan.dtc.LBC = await readDtc('LBC', '190229', scan);
+    if (opts.evc) {
+      let sessionTried = false;
+      for (const def of EVC_DIDS) {
+        step('EVC · ' + def.label);
+        let r = await read('EVC', def);
+        if (!r && !sessionTried) { sessionTried = true; const s = await elm.request('EVC', '10C0'); scan.raw['EVC:10C0'] = s.ok ? s.raw : 'ERR ' + s.err; r = await read('EVC', def); }
+        if (r) scan.evc[def.key] = def.dec(r.data);
+        if (def.key === 'odometer' && r) setLive('odo', 'Odómetro', fmt(scan.evc.odometer, 0) + '<small>km</small>');
+      }
+      step('EVC · identificación'); for (const def of MODULE_ID_DIDS) { const r = await elm.readDid('EVC', def.did, 1); if (r.ok) scan.evc[def.key] = ascii(r.data); }
+      if (!scan.evc.part) { const idr = await elm.request('EVC', '2180'); scan.raw['EVC:2180'] = idr.ok ? idr.raw : 'ERR ' + idr.err; if (idr.ok && idr.data.length >= 20) { const d = idr.data; scan.evc.part = ascii(d.slice(2, 7)); scan.evc.supplier = ascii(d.slice(8, 11)); scan.evc.soft = String(u16(d, 16)) + '/' + String(u16(d, 18)); } }
+      step('EVC · códigos de falla'); scan.dtc.EVC = await readDtc('EVC', '19023B', scan);
+      step('Tablero · VIN'); const vin = await elm.readDid('TDB', 'F190', 17); scan.raw['TDB:F190'] = vin.ok ? vin.hex : 'ERR ' + vin.err; if (vin.ok) scan.vehicle.vin = ascii(vin.data).slice(0, 17);
+    }
+    if (opts.modules) {
+      step('Buscando módulos del vehículo'); scan.modules = await discoverModules(step);
+      for (const m of scan.modules) {
+        const lbcA = elm.resolved.LBC, evcA = elm.resolved.EVC;
+        if (lbcA && m.req === lbcA.req && scan.dtc.LBC) { m.dtc = scan.dtc.LBC; m.part = scan.id.lbcPart; m.soft = scan.id.lbcSoft; m.supplier = scan.id.lbcSupplier; m.tableKey = 'LBC'; continue; }
+        if (evcA && m.req === evcA.req && scan.dtc.EVC) { m.dtc = scan.dtc.EVC; m.part = scan.evc.part; m.soft = scan.evc.soft; m.supplier = scan.evc.supplier; m.tableKey = 'EVC'; continue; }
+        step('Módulo ' + m.name + ' · identificación');
+        for (const def of MODULE_ID_DIDS) { const r = await elm.readDidAt(m, def.did, 1); if (r.ok) m[def.key] = ascii(r.data); }
+        step('Módulo ' + m.name + ' · códigos de falla'); m.dtc = await readDtc(m, '19022F', scan, null, 'MOD:' + m.res);
+      }
+    }
+    scan.meta.finishedAt = new Date().toISOString(); scan.meta.durationS = Math.round((Date.now() - t0) / 10) / 100; scan.meta.requests = { ok: elm.stats.ok, fail: elm.stats.fail };
+    scan.meta.addressing = Object.fromEntries(Object.entries(elm.resolved || {}).map(([k, v]) => [k, v ? `${v.mode} bits ${v.req}→${v.res}` : 'sin respuesta']));
+    scan.meta.addr = Object.fromEntries(Object.entries(elm.resolved || {}).filter(([k, v]) => v).map(([k, v]) => [k, { mode: v.mode, req: v.req, res: v.res }]));
+    currentScan = scan; renderScan(scan); saveHistory(scan); $('progressBox').hidden = true;
+  } catch (e) {
+    if (e.message === 'cancelado') { $('progText').textContent = 'Comprobación cancelada'; }
+    else { $('scanError').hidden = false; $('scanError').textContent = e.message; log('ERROR ' + e.message, 'err'); }
+    $('progressBox').hidden = true;
+  } finally { scanning = false; $('btnScan').disabled = !elm; try { if (wakeLock) { await wakeLock.release(); wakeLock = null; } } catch (e) { /* nada */ } }
+}
+// Descubre qué módulos responden: llamada funcional en 29 bits (18DB33F1) con cabeceras visibles + direcciones físicas conocidas en 11 bits
+async function discoverModules(step) {
+  const mods = [];
+  for (const c of ['ATSP7', 'ATCP18', 'ATSHDB33F1', 'ATAR', 'ATH1', 'ATSTFF', 'ATAT0']) await elm.cmd(c);
+  elm.mode = 29; elm.addr = null; elm.ecu = null;
+  let out = ''; try { out = await elm.cmd('021003', 4000); } catch (e) { await elm.recover(); }
+  for (const l of out.split(/[\r\n]+/)) { const m = l.trim().match(/^18DAF1([0-9A-F]{2})([0-9A-F]+)$/i); if (m) { const sa = m[1].toUpperCase(); if (!mods.find(x => x.sa === sa)) mods.push({ mode: 29, sa, req: 'DA' + sa + 'F1', res: '18DAF1' + sa, name: MODULE_NAMES_29[sa] || ('Módulo 29b ' + sa) }); } }
+  for (const c of ['ATH0', 'ATST32', 'ATAT1']) await elm.cmd(c); elm.headersOn = false;
+  for (const m of MODULES_11) {
+    if (cancelFlag) throw new Error('cancelado');
+    step('Buscando módulo ' + m.name); await elm.applyAddr({ mode: 11, req: m.req, res: m.res });
+    let o = ''; try { o = await elm.cmd('021003', 1500); } catch (e) { await elm.recover(); }
+    if (o.split(/[\r\n]+/).some(l => /^[0-9A-F]{4,}$/i.test(l.trim()))) mods.push({ mode: 11, sa: m.res, req: m.req, res: m.res, name: m.name });
+  }
+  log('Módulos detectados: ' + (mods.map(m => `${m.name} [${m.mode}b ${m.res}]`).join(', ') || 'ninguno'));
+  return mods;
+}
+async function readDtc(target, req, scan, tableKey, rawKey) {
+  const isName = typeof target === 'string';
+  const r = isName ? await elm.request(target, req, 4000) : await elm.requestAt(target, req, 4000);
+  scan.raw[(rawKey || target) + ':' + req] = r.ok ? r.raw : 'ERR ' + r.err;
+  if (!r.ok) return { ok: false, err: r.err, list: [] };
+  const d = r.data; const list = []; const tbl = DTC_TABLES[isName ? target : tableKey] || { dtc: {}, test: {} };
+  for (let i = 3; i + 3 < d.length; i += 4) {
+    const hi = d[i], mid = d[i + 1], ft = d[i + 2], st = d[i + 3];
+    if (st === 0x50 || st === 0x10 || st === 0x00) continue;
+    const id = (hi.toString(16).padStart(2, '0') + mid.toString(16).padStart(2, '0')).toUpperCase(); const ftHex = ft.toString(16).toUpperCase().padStart(2, '0');
+    const code = ['P0', 'P1', 'P2', 'P3', 'C0', 'C1', 'C2', 'C3', 'B0', 'B1', 'B2', 'B3', 'U0', 'U1', 'U2', 'U3'][hi >> 4] + id.slice(1);
+    const flags = []; if (st & 1) flags.push('falla presente'); if (st & 2) flags.push('falló en este ciclo'); if (st & 4) flags.push('pendiente'); if (st & 8) flags.push('confirmado'); if (st & 0x20) flags.push('falló desde el último borrado'); if (st & 0x80) flags.push('testigo encendido');
+    list.push({ code, raw: id + ftHex, desc: tbl.dtc[id] || 'sin descripción en la tabla', type: tbl.test[ftHex] || '', status: st, flags, active: !!(st & 0x81), confirmed: !!(st & 0x08) });
+  }
+  return { ok: true, mask: d[2], list };
+}
+
+// ───────────────────────────── Análisis ─────────────────────────────
+function band(v, bands, higherIsBetter) { // devuelve 0..4 (0 = mejor)
+  if (v === null || v === undefined || Number.isNaN(v)) return null;
+  for (let i = 0; i < bands.length; i++) { if (higherIsBetter ? v >= bands[i] : v <= bands[i]) return i; } return 4;
+}
+const BAND_NAMES = ['Excelente', 'Buena', 'Aceptable', 'Preocupante', 'Evitar'];
+const BAND_CLASS = ['ok', 'ok', 'warn', 'warn', 'crit'];
+const STARS = ['★★★★★', '★★★★☆', '★★★☆☆', '★★☆☆☆', '★☆☆☆☆'];
+function median(a) { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+function analyze(scan) {
+  const L = scan.lbc, P = PROFILE; const a = { checks: [], flags: [] };
+  a.soh = L.soh; a.sohBand = band(L.soh, P.sohBands, true);
+  a.kwhNow = L.soh != null ? L.soh / 100 * P.kwhUsable : null;
+  const cells = scan.cells; const mvs = cells.map(c => c.mv);
+  if (cells.length) { a.cellMin = Math.min(...mvs); a.cellMax = Math.max(...mvs); a.cellMed = median(mvs); a.cellDelta = Math.round((a.cellMax - a.cellMin) * 10) / 10; a.cellMinN = cells.find(c => c.mv === a.cellMin).n; a.cellMaxN = cells.find(c => c.mv === a.cellMax).n; a.cellMean = mvs.reduce((x, y) => x + y, 0) / mvs.length; }
+  else if (L.cellMaxV != null && L.cellMinV != null) { a.cellMin = L.cellMinV * 1000; a.cellMax = L.cellMaxV * 1000; a.cellDelta = a.cellMax - a.cellMin; a.cellMinN = L.cellMinN; a.cellMaxN = L.cellMaxN; a.bmsPairOnly = true; }
+  a.deltaBand = band(a.cellDelta, P.deltaBands, false);
+  const bmsDelta = (L.cellMaxV != null && L.cellMinV != null) ? (L.cellMaxV - L.cellMinV) * 1000 : null; a.bmsDelta = bmsDelta;
+  const dtcL = scan.dtc.LBC, dtcE = scan.dtc.EVC;
+  const activeBms = dtcL && dtcL.ok ? dtcL.list.filter(d => d.active) : [];
+  const confirmedBms = dtcL && dtcL.ok ? dtcL.list.filter(d => d.confirmed && !d.active) : [];
+  const anyBms = dtcL && dtcL.ok ? dtcL.list : [];
+  const activeEvc = dtcE && dtcE.ok ? dtcE.list.filter(d => d.active) : [];
+  // comprobaciones
+  const C = (name, st, detail) => a.checks.push({ name, st, detail });
+  C('BMS responde', L.soh != null ? 'ok' : 'crit', L.soh != null ? `SOH, SOC y voltajes entregados por el LBC (${(scan.meta.addressing && scan.meta.addressing.LBC) || 'dirección por defecto'})` : 'Sin respuesta del LBC');
+  if (L.packV != null) { const inRange = L.packV >= P.packMin && L.packV <= P.packMax; let coh = true; if (L.cellSumV != null) coh = Math.abs(L.cellSumV - L.packV) / L.packV < 0.03; C('Voltaje de pack en rango', inRange && coh ? 'ok' : 'warn', `${fmt(L.packV, 1)} V medidos (rango ${P.packMin}–${P.packMax} V)` + (L.cellSumV != null ? `, suma de celdas ${fmt(L.cellSumV, 1)} V` : '')); } else C('Voltaje de pack en rango', 'na', 'No leído');
+  if (L.tMin != null && L.tMax != null) { const ok = L.tMin >= P.tempMin && L.tMax <= P.tempMax; const spread = L.tMax - L.tMin; const st = !ok ? 'crit' : (spread > 8 ? 'warn' : 'ok'); const noteAlt = (L.tAvgNote || L.tMinNote || L.tMaxNote) ? ' · fórmula de decodificación verificada contra rango plausible' : ''; C('Sensores de temperatura', st, `${fmt(L.tMin, 1)} a ${fmt(L.tMax, 1)} °C (dispersión ${fmt(spread, 1)} °C)` + (scan.temps.length ? `, ${scan.temps.length} sensores individuales` : '') + noteAlt); } else C('Sensores de temperatura', 'na', 'No leído');
+  if (cells.length) { const bad = cells.filter(c => c.mv < P.cellMin * 1000 || c.mv > P.cellMax * 1000); const st = bad.length ? 'crit' : (cells.length < P.cells ? 'warn' : 'ok'); C('Sensores de voltaje de celdas', st, `${cells.length}${cells.length === P.cells ? ' de ' + P.cells : ' celdas (perfil: ' + P.cells + ')'} ${cells.length === P.cells ? 'celdas leídas' : 'leídas'}, ${fmt(a.cellMin / 1000, 3)}–${fmt(a.cellMax / 1000, 3)} V` + (bad.length ? `, ${bad.length} fuera de ${P.cellMin}–${P.cellMax} V (N°${bad.slice(0, 6).map(c => c.n).join(', ')}${bad.length > 6 ? '…' : ''})` : '')); } else C('Sensores de voltaje de celdas', 'na', 'Mapa de celdas no leído' + (bmsDelta != null ? ` (par mín/máx del BMS: Δ ${fmt(bmsDelta, 0)} mV)` : ''));
+  if (a.cellDelta != null) C('Equilibrio de celdas', BAND_CLASS[a.deltaBand], `Δ ${fmt(a.cellDelta, 0)} mV entre la celda ${a.cellMaxN} y la ${a.cellMinN} → ${BAND_NAMES[a.deltaBand]}` + (L.socUser != null && L.socUser < 20 ? ' (SOC bajo: la dispersión suele crecer bajo 20 %)' : ''));
+  if (L.interlock != null) C('Interlock del conector HV', L.interlock === 'Cerrado' ? 'ok' : 'warn', L.interlock);
+  const lv = L.lv12 != null ? L.lv12 : (scan.evc.batt14 != null ? scan.evc.batt14 : null); if (lv != null) C('Red de 12 V', lv >= 12.0 ? 'ok' : 'warn', `${fmt(lv, 2)} V` + (lv >= 13.2 ? ' (DC-DC cargando)' : lv < 12.0 ? ' · batería auxiliar baja' : ''));
+  if (dtcL) C('DTC en el BMS', !dtcL.ok ? 'na' : activeBms.length ? 'crit' : anyBms.length ? 'warn' : 'ok', !dtcL.ok ? 'Lectura de DTC no disponible: ' + dtcL.err : activeBms.length ? `${activeBms.length} código(s) con falla presente ahora` : confirmedBms.length ? `${confirmedBms.length} código(s) confirmados en memoria, sin falla presente` : anyBms.length ? `${anyBms.length} código(s) en memoria sin falla presente` : 'Sin códigos de falla');
+  if (dtcE) C('DTC en el controlador EV', !dtcE.ok ? 'na' : activeEvc.length ? 'warn' : 'ok', !dtcE.ok ? 'Lectura no disponible: ' + dtcE.err : activeEvc.length ? `${activeEvc.length} código(s) activos` : (dtcE.list.length ? `${dtcE.list.length} en memoria, ninguno activo` : 'Sin códigos de falla'));
+  const rq = scan.meta.requests || { ok: 0, fail: 0 }; const failRate = rq.ok + rq.fail ? rq.fail / (rq.ok + rq.fail) : 0; C('Comunicación estable', failRate < 0.1 ? 'ok' : 'warn', `${rq.ok} peticiones OK, ${rq.fail} sin respuesta (${fmt(scan.meta.durationS, 0)} s)`);
+  if (scan.evc.sohEvc != null && L.soh != null) { const diff = Math.abs(scan.evc.sohEvc - L.soh); C('SOH coherente entre BMS y EVC', diff <= 2 ? 'ok' : 'warn', `BMS ${fmt(L.soh, 2)} % vs EVC ${fmt(scan.evc.sohEvc, 0)} %`); }
+  const odoA = odometerOf(scan);
+  if (scan.ext.batteryKm != null && odoA != null) { const d = odoA - scan.ext.batteryKm; C('Kilometraje batería vs odómetro', Math.abs(d) < 2000 ? 'ok' : 'warn', `Batería ${fmt(scan.ext.batteryKm, 0)} km · auto ${fmt(odoA, 0)} km` + (Math.abs(d) >= 2000 ? ' · diferencia grande: posible batería reemplazada o contador reiniciado' : '')); }
+  if (scan.evc.insulationKohm != null) { const k = scan.evc.insulationKohm; C('Aislación de alta tensión', k >= 500 ? 'ok' : k >= 150 ? 'warn' : 'crit', `${fmt(k, 0)} kΩ medidos por el EVC` + (k < 500 ? ' (referencia habitual: >500 kΩ sano, <150 kΩ falla de aislación)' : '')); }
+  const modsA = scan.modules || []; const modActive = modsA.filter(m => m.dtc && m.dtc.ok && m.dtc.list.some(d => d.active)); const modMem = modsA.filter(m => m.dtc && m.dtc.ok && m.dtc.list.length && !m.dtc.list.some(d => d.active));
+  if (modsA.length) C('Otros módulos', modActive.length || modMem.length ? 'warn' : 'ok', `${modsA.length} módulos respondieron` + (modActive.length ? ` · falla presente en: ${modActive.map(m => m.name).join(', ')}` : '') + (modMem.length ? ` · códigos en memoria en: ${modMem.map(m => m.name).join(', ')}` : '') + (modActive.length ? ' · si el auto estaba cargando o sin Ready, algunos módulos marcan fallas presentes que desaparecen en Ready; revisar los códigos en la tabla de módulos' : ''));
+  // puntuación
+  const modsV = scan.modules || []; const modActiveV = modsV.some(m => m.dtc && m.dtc.ok && m.dtc.list.some(d => d.active)); const modMemV = modsV.some(m => m.dtc && m.dtc.ok && m.dtc.list.length);
+  a.score = { cap: a.sohBand, bal: a.deltaBand, sys: activeBms.length ? 4 : modActiveV ? 2 : (anyBms.length || activeEvc.length || modMemV) ? 1 : 0 };
+  const batteryCrit = (a.sohBand === 4) || activeBms.length > 0 || a.checks.some(c => c.st === 'crit' && /celdas|Aislación|pack/i.test(c.name));
+  const anyObs = a.checks.some(c => c.st === 'warn' || c.st === 'crit') || (a.sohBand != null && a.sohBand >= 2) || (a.deltaBand != null && a.deltaBand >= 2);
+  a.verdict3 = batteryCrit ? 'No Aceptable' : anyObs ? 'Con Observaciones' : 'Condición Aceptable';
+  a.verdictClass = a.verdict3 === 'Condición Aceptable' ? 'ok' : a.verdict3 === 'Con Observaciones' ? 'warn' : 'crit';
+  // texto
+  const parts = [];
+  if (L.soh != null) parts.push(`Salud de batería ${BAND_NAMES[a.sohBand].toLowerCase()} (SOH ${fmt(L.soh, 2)} %), equivalente a unos ${fmt(a.kwhNow, 1)} kWh útiles de los ${fmt(P.kwhUsable, 1)} kWh de fábrica.`);
+  if (a.cellDelta != null) parts.push(cells.length ? `Las ${cells.length} celdas se leyeron en reposo con ${fmt(a.cellDelta, 0)} mV de dispersión (${BAND_NAMES[a.deltaBand].toLowerCase()}).` : `El BMS reporta ${fmt(a.cellDelta, 0)} mV entre su celda más alta y más baja.`);
+  if (activeBms.length) parts.push(`Atención: el BMS tiene ${activeBms.length} código(s) de falla presentes; revisar antes de cualquier decisión.`); else if (anyBms.length) parts.push(`El BMS guarda ${anyBms.length} código(s) en memoria sin falla presente (${anyBms.map(d => d.code).join(', ')}).`); else if (dtcL && dtcL.ok) parts.push('Sin códigos de falla en el BMS.');
+  if (L.socUser != null) parts.push(`Lectura tomada al ${fmt(L.socUser, 0)} % de carga y ${fmt(L.tAvg, 1)} °C de batería.`);
+  a.assessment = parts.join(' ');
+  return a;
+}
+
+// ───────────────────────────── Render ─────────────────────────────
+function odometerOf(scan) { const E = scan.evc || {}; const v = [E.odometer, E.odometer2, E.odometer3].find(x => x != null && x > 0 && x < 2000000); return v != null ? Math.round(v) : null; }
+function kvRows(rows) { return rows.filter(r => r[1] !== null && r[1] !== undefined && r[1] !== '').map(r => `<span class="k">${esc(r[0])}</span><span class="v${r[2] ? ' mono' : ''}">${esc(r[1])}</span>`).join(''); }
+function renderScan(scan) {
+  const a = analyze(scan); scan.analysis = { soh: a.soh, sohBand: a.sohBand != null ? BAND_NAMES[a.sohBand] : null, kwhNow: a.kwhNow, cellDelta: a.cellDelta, deltaBand: a.deltaBand != null ? BAND_NAMES[a.deltaBand] : null, verdict: a.verdict3, checks: a.checks, assessment: a.assessment };
+  const L = scan.lbc, E = scan.evc, X = scan.ext;
+  $('results').hidden = false; $('demoTag').hidden = !scan.meta.demo;
+  $('sohVal').textContent = fmt(a.soh, 2); $('sohSub').textContent = a.soh != null ? `Leído al ${fmt(L.socUser, 0)} % SOC · ${fmt(L.tAvg, 1)} °C · ${fmtDate(scan.meta.startedAt)}` : 'Sin lectura';
+  const vb = $('verdictBox'); vb.className = 'verdict ' + (a.sohBand != null ? BAND_CLASS[a.sohBand] : ''); $('verdictLabel').textContent = a.sohBand != null ? BAND_NAMES[a.sohBand] : '–';
+  Array.from($('bands').children).forEach((d, i) => d.classList.toggle('on', a.sohBand != null && i <= a.sohBand));
+  $('verdictSub').innerHTML = `<span class="pill ${a.verdictClass}">Informe: ${esc(a.verdict3)}</span>` + (scan.vehicle.plate ? ` <span class="pill">${esc(scan.vehicle.plate)}</span>` : '');
+  $('energyKv').innerHTML = kvRows([
+    ['Energía útil estimada ahora', a.kwhNow != null ? `${fmt(a.kwhNow, 1)} kWh` : null],
+    ['Energía útil cuando nuevo', `${fmt(PROFILE.kwhUsable, 1)} kWh (nominal ${fmt(PROFILE.kwhNominal, 1)} kWh)`],
+    ['Pérdida de capacidad', a.soh != null ? `${fmt(100 - a.soh, 1)} %` : null],
+    ['Energía disponible según BMS', X.availKwh != null ? `${fmt(X.availKwh, 2)} kWh al ${fmt(L.socUser, 0)} % SOC` : null],
+    ['Energía disponible según EVC', E.availDchgKwh != null ? `${fmt(E.availDchgKwh, 2)} kWh` : null],
+  ]);
+  $('scoreBox').innerHTML = [['Capacidad', a.sohBand], ['Equilibrio de celdas', a.deltaBand], ['Sistemas del vehículo', a.score.sys]].map(([k, v]) => `<div class="s"><div class="k">${k}</div><div class="stars">${v != null ? STARS[v] : '–'}</div><div class="small muted">${v != null ? BAND_NAMES[v] : 'sin dato'}</div></div>`).join('');
+  $('assessment').textContent = a.assessment;
+  $('checksBox').innerHTML = a.checks.map(c => `<div class="c ${c.st}"><span class="ic">${c.st === 'ok' ? '✓' : c.st === 'na' ? '·' : '!'}</span><div><div>${esc(c.name)}</div><div class="d">${esc(c.detail)}</div></div><span class="st">${c.st === 'ok' ? 'OK' : c.st === 'warn' ? 'Obs.' : c.st === 'crit' ? 'Crítico' : 'N/D'}</span></div>`).join('');
+  $('bmsKv').innerHTML = kvRows([
+    ['SOC mostrado / SOC real BMS', L.socUser != null ? `${fmt(L.socUser, 1)} % / ${fmt(L.socBms, 1)} %` : null],
+    ['Voltaje del pack', L.packV != null ? `${fmt(L.packV, 1)} V` : null],
+    ['Suma de voltajes de celda', L.cellSumV != null ? `${fmt(L.cellSumV, 2)} V` : null],
+    ['Corriente en reposo', L.currentA != null ? `${fmt(L.currentA, 2)} A` : null],
+    ['Celda máx. / mín. según BMS', L.cellMaxV != null ? `${fmt(L.cellMaxV, 3)} V (N°${L.cellMaxN}) / ${fmt(L.cellMinV, 3)} V (N°${L.cellMinN}) · Δ ${fmt(a.bmsDelta, 0)} mV` : null],
+    ['Potencia máx. descarga / regen / carga', L.maxDchgKw != null ? `${fmt(L.maxDchgKw, 1)} / ${fmt(L.maxRegenKw, 1)} / ${fmt(L.maxChgKw, 1)} kW` : null],
+    ['Alimentación 12 V vista por el BMS', L.lv12 != null ? `${fmt(L.lv12, 2)} V` : null],
+    ['Interlock HV · fin de carga', L.interlock != null ? `${L.interlock} · ${L.endOfCharge}` : null],
+    ['Resistencia DC carga / descarga', X.dcrChg != null ? `${fmt(X.dcrChg, 2)} / ${fmt(X.dcrDchg, 2)} mΩ` : null],
+    ['SOH potencia disponible / regenerada', X.sohAvailPower != null ? `${fmt(X.sohAvailPower, 1)} / ${fmt(X.sohGenPower, 1)} %` : null],
+    ['N° identificación batería', L.batteryId || null, true],
+    ['BMS: parte · proveedor · software', scan.id.lbcPart ? `${scan.id.lbcPart} · ${scan.id.lbcSupplier || '?'} · ${scan.id.lbcSoft || ''} ${scan.id.lbcVer || ''}`.trim() : null, true],
+  ]);
+  // celdas
+  $('cellsPanel').hidden = !scan.cells.length && a.cellDelta == null;
+  if (scan.cells.length) {
+    $('cellKv').innerHTML = kvRows([
+      ['Celdas leídas', `${scan.cells.length} de ${PROFILE.cells}`],
+      ['Mínima / mediana / máxima', `${fmt(a.cellMin / 1000, 3)} V (N°${a.cellMinN}) · ${fmt(a.cellMed / 1000, 3)} V · ${fmt(a.cellMax / 1000, 3)} V (N°${a.cellMaxN})`],
+      ['Dispersión máx–mín', `${fmt(a.cellDelta, 0)} mV → ${BAND_NAMES[a.deltaBand]}`],
+      ['Celdas a más de 10 mV de la mediana', String(scan.cells.filter(c => Math.abs(c.mv - a.cellMed) > 10).map(c => 'N°' + c.n).join(', ') || 'ninguna')],
+      ['En balanceo durante la lectura', X.balancing || null],
+    ]);
+    $('cellChartWrap').innerHTML = cellChart(scan.cells, a.cellMed);
+    $('cellTableWrap').innerHTML = `<table><thead><tr><th>Celda</th><th class="num">mV</th><th class="num">Δ mediana</th><th>Celda</th><th class="num">mV</th><th class="num">Δ mediana</th></tr></thead><tbody>` + Array.from({ length: Math.ceil(scan.cells.length / 2) }, (_, i) => { const l = scan.cells[i], r = scan.cells[i + Math.ceil(scan.cells.length / 2)]; const cell = (c) => c ? `<td>N°${c.n}</td><td class="num">${fmt(c.mv, 1)}</td><td class="num">${(c.mv - a.cellMed >= 0 ? '+' : '') + fmt(c.mv - a.cellMed, 1)}</td>` : '<td></td><td></td><td></td>'; return `<tr>${cell(l)}${cell(r)}</tr>`; }).join('') + '</tbody></table>';
+    $('cellChartWrap').hidden = false; $('cellTableWrap').hidden = true; $('btnCellTable').textContent = 'Ver tabla';
+  } else { $('cellKv').innerHTML = kvRows([['Mapa de celdas', 'no leído'], ['Par mín/máx del BMS', a.cellDelta != null ? `Δ ${fmt(a.cellDelta, 0)} mV` : null]]); $('cellChartWrap').innerHTML = ''; $('cellTableWrap').innerHTML = ''; }
+  // temperaturas
+  $('tempKv').innerHTML = kvRows([
+    ['Media / mínima / máxima (BMS)', L.tAvg != null ? `${fmt(L.tAvg, 1)} / ${fmt(L.tMin, 1)} / ${fmt(L.tMax, 1)} °C` : null],
+    ['Dispersión entre sensores', L.tMin != null ? `${fmt(L.tMax - L.tMin, 1)} °C` : null],
+    ['Temperatura exterior (EVC)', E.ambientC != null ? `${fmt(E.ambientC, 0)} °C` : null],
+    ['Decodificación', (L.tAvgNote === 'alt') ? 'fórmula alternativa (raw−400)/2 — verificar' : (L.tAvgNote === 'suspect' ? 'valor fuera de rango plausible — revisar bytes crudos' : null)],
+  ]);
+  $('sensorsBox').innerHTML = scan.temps.map(t => `<div class="t${t.c > 45 ? ' hot' : ''}"><div class="k">T${t.n}</div><div class="v">${fmt(t.c, 1)}°</div></div>`).join('');
+  // módulos y DTC (tarjetas)
+  renderModules(scan);
+  // vehículo
+  const odo = odometerOf(scan);
+  $('vehKv').innerHTML = kvRows([
+    ['Patente', scan.vehicle.plate || null], ['Modelo', scan.vehicle.model || null], ['VIN', scan.vehicle.vin || null, true],
+    ['Odómetro (leído del auto)', odo != null ? `${fmt(odo, 0)} km` : null], ['Kilometraje tablero (manual)', scan.vehicle.kmManual != null ? `${fmt(scan.vehicle.kmManual, 0)} km` : null],
+    ['SOC según el EVC', E.socEvc != null ? `${fmt(E.socEvc, 1)} %` + (E.socUserEvc != null ? ` (usuario ${fmt(E.socUserEvc, 0)} %)` : '') : (E.socEvcOld != null ? `${fmt(E.socEvcOld, 1)} %` : null)],
+    ['SOH según el EVC', E.sohEvc != null ? `${fmt(E.sohEvc, 0)} %` : null],
+    ['Resistencia de aislación HV', E.insulationKohm != null ? `${fmt(E.insulationKohm, 0)} kΩ` : null],
+    ['Corriente HV / DC-DC (EVC)', E.hvA != null ? `${fmt(E.hvA, 2)} A` + (E.dcdcA != null ? ` / ${fmt(E.dcdcA, 0)} A` : '') : null],
+    ['Voltaje HV medido por el EVC', E.hvV != null ? `${fmt(E.hvV, 1)} V` : null],
+    ['Temperatura batería según el EVC', E.hvbTempEvc != null ? `${fmt(E.hvbTempEvc, 0)} °C` : null],
+    ['Autonomía estimada en tablero', E.rangeKm != null ? `${fmt(E.rangeKm, 0)} km` : null],
+    ['Potencia de carga disponible (ext. / AC)', E.availChgKw != null || E.acChgKw != null ? `${E.availChgKw != null ? fmt(E.availChgKw, 1) + ' kW' : '–'} / ${E.acChgKw != null ? fmt(E.acChgKw, 2) + ' kW' : '–'}` : null],
+    ['Enchufe de carga', E.plug || null],
+    ['Batería 12 V (EVC)', E.batt14 != null ? `${fmt(E.batt14, 2)} V` : null],
+    ['Voltaje en el conector OBD', scan.meta.adapter.obdVoltage || null],
+    ['EVC: parte · proveedor · software', E.part ? `${E.part} · ${E.supplier || '?'} · ${E.soft || ''}`.trim() : null, true],
+    ['Direccionamiento', scan.meta.addressing ? Object.entries(scan.meta.addressing).map(([k, v]) => `${k}: ${v}`).join(' · ') : null, true],
+    ['Adaptador', `${scan.meta.adapter.name} · ${scan.meta.adapter.elm}`],
+    ['Inspector · notas', [scan.vehicle.inspector, scan.vehicle.notes].filter(Boolean).join(' · ') || null],
+  ]);
+  // crudo
+  $('rawTableWrap').innerHTML = `<table><thead><tr><th>ECU:DID</th><th>Bytes</th></tr></thead><tbody>` + Object.entries(scan.raw).map(([k, v]) => `<tr><td class="mono">${esc(k)}</td><td class="mono">${esc(v)}</td></tr>`).join('') + '</tbody></table>';
+  $('exportArea').hidden = true;
+  $('btnShare').hidden = !(navigator.share);
+  $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function unifiedModules(scan) {
+  const list = (scan.modules || []).map(m => Object.assign({}, m));
+  const addr = scan.meta.addr || {};
+  const ensure = (key, name, extra) => { const a = addr[key]; const found = a ? list.find(m => m.req === a.req && m.mode === a.mode) : null; if (found) { if (!found.dtc) found.dtc = scan.dtc[key]; found.tableKey = key; Object.assign(found, extra, { part: found.part || extra.part, soft: found.soft || extra.soft, supplier: found.supplier || extra.supplier }); } else if (scan.dtc[key]) list.push(Object.assign({ name, mode: a ? a.mode : null, req: a ? a.req : '', res: a ? a.res : '', dtc: scan.dtc[key], tableKey: key, synthetic: !a }, extra)); };
+  ensure('LBC', ECUS.LBC.name, { part: scan.id.lbcPart, soft: scan.id.lbcSoft, supplier: scan.id.lbcSupplier });
+  ensure('EVC', ECUS.EVC.name, { part: scan.evc.part, soft: scan.evc.soft, supplier: scan.evc.supplier });
+  const rank = (m) => m.tableKey === 'LBC' ? 0 : m.tableKey === 'EVC' ? 1 : 2;
+  return list.sort((x, y) => rank(x) - rank(y) || x.name.localeCompare(y.name));
+}
+function dtcStatus(d) { const st = d.status; if (st & 0x01) return ['Activa', 'crit']; if (st & 0x08) return ['Confirmada', 'warn']; if (st & 0x04) return ['Pendiente', 'warn']; return ['Histórica', '']; }
+function renderModules(scan) {
+  const mods = unifiedModules(scan); const box = $('dtcBox');
+  if (!mods.length) { box.innerHTML = '<div class="muted">No se leyeron módulos ni códigos de falla.</div>'; $('modSummary').textContent = ''; $('btnClearAll').hidden = true; $('clearWarn').hidden = true; return; }
+  const withCodes = mods.filter(m => m.dtc && m.dtc.ok && m.dtc.list.length); const nActive = mods.reduce((n, m) => n + (m.dtc && m.dtc.ok ? m.dtc.list.filter(d => d.active).length : 0), 0); const nTotal = mods.reduce((n, m) => n + (m.dtc && m.dtc.ok ? m.dtc.list.length : 0), 0);
+  $('modSummary').textContent = `${mods.length} módulos · ${nTotal} códigos en ${withCodes.length} módulos · ${nActive} con falla presente ahora`;
+  $('clearWarn').hidden = !withCodes.length; $('btnClearAll').hidden = !withCodes.length || !elm;
+  box.innerHTML = mods.map((m, i) => {
+    const d = m.dtc; const hasActive = d && d.ok && d.list.some(x => x.active); const hasMem = d && d.ok && d.list.length;
+    const pill = !d ? '<span class="pill">sin lectura</span>' : !d.ok ? `<span class="pill">DTC no disponibles</span>` : !d.list.length ? '<span class="pill ok">sin códigos</span>' : hasActive ? `<span class="pill crit">${d.list.filter(x => x.active).length} activo(s) · ${d.list.length} en total</span>` : `<span class="pill warn">${d.list.length} en memoria</span>`;
+    const ident = [m.part && 'N° parte ' + m.part, m.soft && 'soft ' + m.soft, m.supplier && m.supplier].filter(Boolean).join(' · ');
+    const items = d && d.ok ? d.list.map(x => { const [lbl, cls] = dtcStatus(x); return `<li><code>${esc(x.code)}</code><div>${esc(x.desc !== 'sin descripción en la tabla' ? x.desc : '')}${x.type ? (x.desc !== 'sin descripción en la tabla' ? ' · ' : '') + esc(x.type) : ''}${x.desc === 'sin descripción en la tabla' && !x.type ? '<span class="muted">sin descripción en la tabla</span>' : ''}</div><div class="st"><span class="pill ${cls}">${lbl}</span><span>${esc(x.flags.join(', ') || 'estado 0x' + x.status.toString(16))}</span><span>bytes ${x.raw} · estado ${x.status.toString(16).toUpperCase().padStart(2, '0')}</span></div></li>`; }).join('') : '';
+    const clearBtn = hasMem && m.mode ? `<div class="row"><button class="btn sm danger" data-clear="${i}">Borrar códigos de este módulo</button></div>` : '';
+    return `<div class="modcard ${hasActive ? 'has-active' : hasMem ? 'has-mem' : d && d.ok ? 'clean' : ''}"><div class="mh"><b>${esc(m.name)}</b>${pill}</div><div class="mid">${m.mode ? m.mode + ' bits · ' + esc(m.req) + ' → ' + esc(m.res) : ''}${ident ? (m.mode ? ' · ' : '') + esc(ident) : ''}</div>${items ? `<ul class="dtclist">${items}</ul>` : ''}${d && !d.ok ? `<div class="muted small">${esc(d.err)}</div>` : ''}${clearBtn}</div>`;
+  }).join('');
+  box.querySelectorAll('button[data-clear]').forEach(b => b.addEventListener('click', () => armAndRun(b, () => clearModule(mods[Number(b.dataset.clear)]))));
+}
+function armAndRun(btn, fn) {
+  if (!elm) { toast('Conecta el adaptador para borrar códigos'); return; }
+  if (btn.classList.contains('armed')) { btn.classList.remove('armed'); clearTimeout(btn._t); fn(); return; }
+  const label = btn.textContent; btn.classList.add('armed'); btn.textContent = '¿Seguro? Toca de nuevo para borrar'; btn._t = setTimeout(() => { btn.classList.remove('armed'); btn.textContent = label; }, 6000);
+}
+async function clearModule(m) {
+  if (!elm || scanning || probing) { toast('Espera a que termine lo que está corriendo'); return; }
+  if (!currentScan) return; const scan = currentScan; scan.cleared = scan.cleared || [];
+  toast('Borrando códigos de ' + m.name + '…'); log('Borrar DTC en ' + m.name + ' (' + m.req + ')');
+  try {
+    let r = await elm.requestAt(m, '14FFFFFF', 6000);
+    if (!r.ok && r.nrc && /7F|7E|22|33/.test(r.nrc)) { await elm.requestAt(m, '1003'); r = await elm.requestAt(m, '14FFFFFF', 6000); }
+    const entry = { module: m.name, req: m.req, at: new Date().toISOString(), ok: r.ok, err: r.ok ? null : r.err }; scan.cleared.push(entry);
+    if (!r.ok) { toast('No se pudo borrar: ' + r.err); log('Borrar DTC falló: ' + r.err, 'err'); }
+    else { toast('Códigos borrados en ' + m.name); await new Promise(res => setTimeout(res, 500)); }
+    // relectura
+    const key = m.tableKey; const req = key === 'LBC' ? '190229' : key === 'EVC' ? '19023B' : '19022F';
+    const d = await readDtc(key ? key : m, req, scan, key, 'MOD:' + m.res);
+    if (key) scan.dtc[key] = d; const orig = (scan.modules || []).find(x => x.req === m.req && x.mode === m.mode); if (orig) orig.dtc = d;
+    renderScan(scan);
+  } catch (e) { toast('Error al borrar: ' + e.message); log('Borrar DTC error: ' + e.message, 'err'); }
+}
+async function clearAllModules() {
+  if (!currentScan) return; const mods = unifiedModules(currentScan).filter(m => m.dtc && m.dtc.ok && m.dtc.list.length && m.mode);
+  for (const m of mods) { await clearModule(m); }
+  toast('Listo: ' + mods.length + ' módulos');
+}
+function cellChart(cells, med) {
+  const wrap = $('cellChartWrap'); const W = Math.max(320, Math.min(760, (wrap && wrap.clientWidth) || 760)); const H = W < 480 ? 210 : 230, padL = 40, padR = 8, padT = 18, padB = 28; const n = cells.length;
+  const devs = cells.map(c => c.mv - med); const maxAbs = Math.max(10, ...devs.map(Math.abs)); const lim = Math.ceil(maxAbs / 5) * 5;
+  const plotW = W - padL - padR, plotH = H - padT - padB; const y0 = padT + plotH / 2; const sy = (plotH / 2) / lim; const bw = plotW / n; const barW = Math.max(2, bw - 2);
+  const ticks = [-lim, -lim / 2, 0, lim / 2, lim];
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Desviación de cada celda respecto a la mediana en milivoltios">`;
+  for (const t of ticks) { const y = y0 - t * sy; s += `<line class="${t === 0 ? 'zero' : 'grid'}" x1="${padL}" x2="${W - padR}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text x="${padL - 6}" y="${(y + 4).toFixed(1)}" text-anchor="end">${t > 0 ? '+' : ''}${t}</text>`; }
+  const iMin = devs.indexOf(Math.min(...devs)), iMax = devs.indexOf(Math.max(...devs));
+  cells.forEach((c, i) => { const d = devs[i]; const x = padL + i * bw + 1; const h = Math.abs(d) * sy; const y = d >= 0 ? y0 - h : y0; const col = Math.abs(d) <= 2 ? 'var(--chart-mid)' : (d > 0 ? 'var(--chart-pos)' : 'var(--chart-neg)');
+    s += `<rect data-i="${i}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1.5, h).toFixed(1)}" rx="1" fill="${col}"><title>Celda ${c.n}: ${fmt(c.mv / 1000, 3)} V (${d >= 0 ? '+' : ''}${fmt(d, 1)} mV)</title></rect>`; });
+  for (const i of [iMin, iMax]) { if (n < 2) break; const c = cells[i]; const d = devs[i]; const x = padL + i * bw + barW / 2 + 1; const y = d >= 0 ? y0 - Math.abs(d) * sy - 5 : y0 + Math.abs(d) * sy + 12; const anchor = i > n * 0.85 ? 'end' : (i < n * 0.15 ? 'start' : 'middle'); s += `<text class="lbl" x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}">N°${c.n} ${d >= 0 ? '+' : ''}${fmt(d, 0)} mV</text>`; }
+  for (const k of [1, Math.round(n / 4), Math.round(n / 2), Math.round(3 * n / 4), n]) { if (k < 1 || k > n) continue; const x = padL + (k - 1) * bw + barW / 2 + 1; s += `<text x="${x.toFixed(1)}" y="${H - 8}" text-anchor="middle">${k}</text>`; }
+  s += '</svg>';
+  return s;
+}
+
+// ───────────────────────────── Exportar / historial ─────────────────────────────
+function summaryText(scan) {
+  const a = scan.analysis || {}; const L = scan.lbc, E = scan.evc; const d = fmtDate(scan.meta.startedAt);
+  const lines = [`RevisaElAuto · Diagnóstico de batería EV${scan.meta.demo ? ' (DEMO)' : ''}`, `${scan.vehicle.model || PROFILE.name}${scan.vehicle.plate ? ' · ' + scan.vehicle.plate : ''} · ${d}`];
+  if (scan.vehicle.vin) lines.push(`VIN ${scan.vehicle.vin}`);
+  const odoS = odometerOf(scan);
+  if (odoS != null) lines.push(`Odómetro ${fmt(odoS, 0)} km`); else if (scan.vehicle.kmManual != null) lines.push(`Kilometraje ${fmt(scan.vehicle.kmManual, 0)} km (tablero)`);
+  if (L.soh != null) lines.push(`SOH (BMS): ${fmt(L.soh, 2)} % → ${a.sohBand} · ~${fmt(a.kwhNow, 1)} de ${fmt(PROFILE.kwhUsable, 1)} kWh útiles`);
+  if (L.socUser != null) lines.push(`SOC ${fmt(L.socUser, 0)} % · pack ${fmt(L.packV, 1)} V · ${fmt(L.currentA, 1)} A · ${fmt(L.tAvg, 1)} °C (${fmt(L.tMin, 1)}–${fmt(L.tMax, 1)})`);
+  if (a.cellDelta != null) lines.push(`Celdas: ${scan.cells.length ? scan.cells.length + ' leídas · ' : ''}Δ ${fmt(a.cellDelta, 0)} mV → ${a.deltaBand}`);
+  const dl = scan.dtc.LBC, de = scan.dtc.EVC;
+  if (dl) lines.push(`DTC BMS: ${!dl.ok ? 'no leído' : dl.list.length ? dl.list.map(x => x.code + (x.active ? '*' : '')).join(', ') : 'ninguno'}` + (de ? ` · DTC EVC: ${!de.ok ? 'no leído' : de.list.length ? de.list.map(x => x.code + (x.active ? '*' : '')).join(', ') : 'ninguno'}` : ''));
+  if (E.sohEvc != null) lines.push(`SOH según EVC: ${fmt(E.sohEvc, 0)} %`);
+  if (E.insulationKohm != null) lines.push(`Aislación HV: ${fmt(E.insulationKohm, 0)} kΩ`);
+  const modsS = scan.modules || []; if (modsS.length) lines.push(`Módulos: ${modsS.length} respondieron · DTC: ${modsS.filter(m => m.dtc && m.dtc.ok && m.dtc.list.length).map(m => `${m.name} (${m.dtc.list.map(d => d.code + (d.active ? '*' : '')).join(', ')})`).join('; ') || 'ninguno'}`);
+  lines.push(`Veredicto: ${a.verdict}`);
+  const obs = (a.checks || []).filter(c => c.st === 'warn' || c.st === 'crit').map(c => `- ${c.name}: ${c.detail}`); if (obs.length) lines.push('Observaciones:', ...obs);
+  return lines.join('\n');
+}
+const HIST_KEY = 'revisaelauto_ev_scans_v1';
+function loadHistory() { try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch (e) { return []; } }
+function saveHistory(scan) { try { const h = loadHistory(); h.unshift(scan); while (h.length > 25) h.pop(); localStorage.setItem(HIST_KEY, JSON.stringify(h)); } catch (e) { /* sin almacenamiento */ } renderHistory(); }
+function renderHistory() { const h = loadHistory(); $('histPanel').hidden = !h.length; $('histBox').innerHTML = h.map((s, i) => `<div class="h"><div><b>${fmt(s.lbc && s.lbc.soh, 2)} %</b> SOH · ${esc(s.vehicle.plate || s.vehicle.model || '')}${s.meta.demo ? ' · demo' : ''}<div class="muted small">${fmtDate(s.meta.startedAt)} · ${s.cells ? s.cells.length : 0} celdas</div></div><button class="btn sm" data-i="${i}">Abrir</button></div>`).join(''); }
+
+// ───────────────────────────── Eventos ─────────────────────────────
+let connecting = false; let forceInFrame = false;
+const IN_FRAME = (() => { try { return window.top !== window.self; } catch (e) { return true; } })();
+async function connectWith(tr) {
+  if (connecting) { toast('Ya hay una conexión en curso'); return; }
+  if (IN_FRAME && !forceInFrame && !(tr instanceof FakeTransport)) { $('btWarn').scrollIntoView({ behavior: 'smooth', block: 'center' }); toast('Abre la app sola primero (botón de arriba)'); return; }
+  connecting = true; $('btnConnect').disabled = true;
+  try {
+    $('connError').hidden = true; setConn('warn', 'Conectando…'); transport = tr;
+    await withTimeout(tr.connect(), 60000, 'La conexión Bluetooth no terminó en 60 s (ver registro en Avanzado)');
+    elm = new Elm(tr);
+    tr.onDisconnect = () => { setConn('crit', 'Desconectado'); elm = null; $('btnScan').disabled = true; $('btnDisconnect').hidden = true; $('btnConnect').hidden = false; };
+    setConn('warn', 'Inicializando ELM…'); await withTimeout(elm.init(), 40000, 'El adaptador no terminó de inicializar en 40 s (ver registro en Avanzado)');
+    setConn('ok', tr.name); $('adapterInfo').hidden = false; $('adName').textContent = tr.name + (tr.device && tr.device.id ? ' · ' + String(tr.device.id).slice(0, 8) + '…' : ''); $('adVer').textContent = elm.version || '–'; $('adVolt').textContent = elm.voltage || '–';
+    if (tr.device && tr.device.id) { try { localStorage.setItem(DEVICE_KEY, JSON.stringify({ id: tr.device.id, name: tr.device.name || '' })); } catch (e) { /* nada */ } $('btnForget').hidden = false; }
+    $('btnScan').disabled = false; $('btnDisconnect').hidden = false; $('btnConnect').hidden = true; toast('Adaptador listo');
+  } catch (e) {
+    log('ERROR conexión: ' + e.message, 'err'); setConn('crit', 'Sin adaptador'); elm = null;
+    try { if (transport && transport.disconnect) await transport.disconnect(); } catch (e2) { /* nada */ }
+    transport = null;
+    $('connError').hidden = false; $('connError').innerHTML = `No se pudo conectar: ${esc(e.message)} <button class="btn sm" id="btnCopyLogErr">Copiar registro</button>`;
+    $('btnCopyLogErr').addEventListener('click', () => copyText(logLines.map(l => l.t.toTimeString().slice(0, 8) + ' ' + l.txt).join('\n'), 'Registro'));
+    $('advDetails').open = true;
+  } finally { connecting = false; $('btnConnect').disabled = false; }
+}
+$('btnConnect').addEventListener('click', () => connectWith(new BleTransport()));
+function showRemembered() { let r = null; try { r = JSON.parse(localStorage.getItem(DEVICE_KEY) || 'null'); } catch (e) { r = null; } const p = $('rememberedInfo'); p.hidden = !r; $('btnForget').hidden = !r; if (r) p.textContent = `Adaptador recordado: ${r.name || 'sin nombre'} · ${String(r.id).slice(0, 13)}… (en la lista aparece con ese código).`; }
+$('btnForget').addEventListener('click', () => { try { localStorage.removeItem(DEVICE_KEY); } catch (e) { /* nada */ } showRemembered(); toast('Adaptador olvidado'); });
+$('btnDemo').addEventListener('click', () => connectWith(new FakeTransport()));
+$('btnDisconnect').addEventListener('click', async () => { if (transport) await transport.disconnect(); transport = null; elm = null; setConn('', 'Sin adaptador'); $('btnScan').disabled = true; $('btnDisconnect').hidden = true; $('btnConnect').hidden = false; $('adapterInfo').hidden = true; });
+$('btnScan').addEventListener('click', runScan);
+$('btnCancel').addEventListener('click', () => { cancelFlag = true; });
+$('btnClearAll').addEventListener('click', () => armAndRun($('btnClearAll'), clearAllModules));
+$('btnCellTable').addEventListener('click', () => { const t = $('cellTableWrap'); t.hidden = !t.hidden; $('cellChartWrap').hidden = !t.hidden; $('btnCellTable').textContent = t.hidden ? 'Ver tabla' : 'Ver gráfico'; });
+$('btnCopySummary').addEventListener('click', () => { if (currentScan) copyText(summaryText(currentScan), 'Resumen'); });
+$('btnCopyJson').addEventListener('click', () => { if (currentScan) copyText(JSON.stringify(currentScan, null, 1), 'JSON'); });
+$('btnShare').addEventListener('click', async () => { if (!currentScan) return; try { await navigator.share({ title: 'Diagnóstico batería EV', text: summaryText(currentScan) }); } catch (e) { /* cancelado */ } });
+$('btnClearHist').addEventListener('click', () => { try { localStorage.removeItem(HIST_KEY); } catch (e) { /* nada */ } renderHistory(); });
+$('histBox').addEventListener('click', (e) => { const b = e.target.closest('button[data-i]'); if (!b) return; const h = loadHistory(); const s = h[Number(b.dataset.i)]; if (s) { currentScan = s; renderScan(s); } });
+$('btnCopyLog').addEventListener('click', () => copyText(logLines.map(l => l.t.toTimeString().slice(0, 8) + ' ' + l.txt).join('\n'), 'Registro'));
+// Diagnóstico de bus: ¿quién responde, en qué bus y con qué dirección?
+async function busProbe() {
+  if (!elm) { toast('Conecta un adaptador primero'); return; }
+  if (scanning || probing) { toast('Espera a que termine lo que está corriendo'); return; }
+  probing = true; $('btnProbe').disabled = true; const out = $('probeOut'); out.hidden = false; out.textContent = 'Probando…';
+  const results = [];
+  const run = async (c) => { try { return (await elm.cmd(c, 3500)).replace(/\r/g, ' ').trim(); } catch (e) { await elm.recover(); return 'timeout'; } };
+  const probe = async (label, cmds) => { let last = ''; for (const c of cmds) last = await run(c); const ok = /^[0-9A-F]{4,}/i.test(last) && !/NO DATA|ERROR|UNABLE|STOPPED/i.test(last); results.push({ label, ok, resp: last.slice(0, 120) }); out.textContent = results.map(r => (r.ok ? '✓ ' : '✗ ') + r.label + ' → ' + r.resp).join('\n'); return ok; };
+  try {
+    await run('ATSTFF'); await run('ATAT0');
+    results.push({ label: 'Adaptador', ok: true, resp: `${await run('ATI')} · ${await run('ATRV')} · protocolo ${await run('ATDPN')}` });
+    await probe('11 bits 500k · BMS 79B sesión 1003', ['ATSP6', 'ATSH79B', 'ATCRA7BB', 'ATFCSH79B', '021003']);
+    await probe('11 bits · BMS 79B SOH 229003', ['03229003']);
+    await probe('11 bits · EVC 7E4 odómetro 222006', ['ATSH7E4', 'ATCRA7EC', 'ATFCSH7E4', '03222006']);
+    await probe('11 bits · EVC 7E4 sesión 10C0', ['0210C0']);
+    await probe('11 bits · tablero 743 VIN 22F190', ['ATSH743', 'ATCRA763', 'ATFCSH743', '0322F190']);
+    await probe('11 bits · llamada general 7DF OBD-II 0100', ['ATSH7DF', 'ATAR', '020100']);
+    await probe('11 bits · llamada general 7DF sesión 1003', ['021003']);
+    await probe('11 bits · llamada general 7DF VIN 22F190', ['0322F190']);
+    await probe('29 bits 500k · BMS DB (18DADBF1) sesión 1003', ['ATSP7', 'ATCP18', 'ATSHDADBF1', 'ATCRA18DAF1DB', 'ATFCSH18DADBF1', '021003']);
+    await probe('29 bits · BMS DB SOH 229003', ['03229003']);
+    await probe('29 bits · BMS DA (18DADAF1) SOH 229003', ['ATSHDADAF1', 'ATCRA18DAF1DA', 'ATFCSH18DADAF1', '03229003']);
+    await probe('29 bits · EVC DA odómetro 222006', ['03222006']);
+    await probe('29 bits · llamada general 33 (18DB33F1) OBD-II 0100', ['ATSHDB33F1', 'ATAR', '020100']);
+    await probe('29 bits · llamada general 33 sesión 1003', ['021003']);
+    await probe('11 bits 250k (ATSP8) · BMS 79B sesión 1003', ['ATSP8', 'ATSH79B', 'ATCRA7BB', 'ATFCSH79B', '021003']);
+    await probe('11 bits 250k · llamada general 7DF 0100', ['ATSH7DF', 'ATAR', '020100']);
+  } finally {
+    await run('ATSP6'); await run('ATAT1'); await run('ATST32'); await run('ATCAF0'); elm.ecu = null; elm.addr = null; elm.mode = 11; elm.headersOn = false;
+    probing = false; $('btnProbe').disabled = false;
+    const txt = 'Diagnóstico de bus · ' + fmtDate(new Date().toISOString()) + '\n' + results.map(r => (r.ok ? '✓ ' : '✗ ') + r.label + ' → ' + r.resp).join('\n');
+    out.innerHTML = `<div style="white-space:pre-wrap;font-family:var(--font-mono);font-size:12px">${esc(txt)}</div><div class="row" style="margin-top:8px"><button class="btn sm" id="btnCopyProbe">Copiar resultado</button></div>`;
+    $('btnCopyProbe').addEventListener('click', () => copyText(txt, 'Resultado'));
+  }
+}
+let probing = false;
+$('btnProbe').addEventListener('click', busProbe);
+$('btnClearLog').addEventListener('click', () => { logLines.length = 0; $('logBox').innerHTML = ''; });
+async function termSend(c) { if (!elm) { toast('Conecta un adaptador primero'); return; } c = c.trim(); if (!c) return; if (scanning) { toast('Espera a que termine la comprobación'); return; } try { const r = await elm.cmd(c.toUpperCase(), 4000); if (!/^AT/i.test(c)) { /* mantener ecu desconocido tras comandos manuales de cabecera */ } if (/^ATSH|^ATCRA|^ATFCSH|^ATSP|^ATZ|^ATWS|^ATH|^ATCP|^ATAR/i.test(c)) { elm.ecu = null; elm.addr = null; elm.mode = null; } if (/^ATH1/i.test(c)) elm.headersOn = true; if (/^ATH0/i.test(c)) elm.headersOn = false; toast(r ? r.replace(/\r/g, ' ').slice(0, 60) : '(sin respuesta)'); } catch (e) { log('ERROR ' + e.message, 'err'); await elm.recover(); toast('Sin respuesta (timeout)'); } }
+$('termSend').addEventListener('click', () => termSend($('termIn').value));
+$('termIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') termSend($('termIn').value); });
+document.querySelectorAll('.term-q').forEach(b => b.addEventListener('click', () => { $('termIn').value = b.dataset.c; termSend(b.dataset.c); }));
+let resizeT = null; window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (currentScan && currentScan.cells && currentScan.cells.length && !$('results').hidden) { const a = currentScan.analysis; $('cellChartWrap').innerHTML = cellChart(currentScan.cells, median(currentScan.cells.map(c => c.mv))); } }, 150); });
+(function boot() {
+  renderHistory(); showRemembered();
+  log((IN_FRAME ? 'Página abierta DENTRO de un visor (iframe): ' : 'Página abierta directa: ') + location.href + ' · navigator.bluetooth ' + (navigator.bluetooth ? 'disponible' : 'NO disponible') + ' · ' + navigator.userAgent.slice(0, 80));
+  if (!navigator.bluetooth) { const w = $('btWarn'); w.hidden = false; w.innerHTML = `<b>Este navegador no expone Bluetooth.</b> Abre esta misma dirección en <b>Bluefy</b> (iPhone) o en Chrome (Android)${IN_FRAME ? ', directamente y no dentro del visor' : ''}. Dirección de la página: <span class="mono">${esc(location.href)}</span> <button class="btn sm" id="btnCopyUrl">Copiar dirección</button>`; $('btnCopyUrl').addEventListener('click', () => copyText(location.href, 'Dirección')); }
+  else if (IN_FRAME) { const w = $('btWarn'); w.hidden = false; w.innerHTML = `<b>La app está dentro del visor de Claude y ahí la conexión Bluetooth se queda pegada.</b> Ábrela en una pestaña propia y conecta desde ahí:<div class="row" style="margin-top:8px"><a class="btn primary" href="${esc(location.href)}" target="_blank" rel="noopener">Abrir la app sola</a><button class="btn sm" id="btnCopyUrl">Copiar dirección</button></div><div class="mono" style="margin-top:6px">${esc(location.href)}</div><div class="small" style="margin-top:6px">Guarda esa pestaña como marcador en Bluefy para la próxima vez. <a href="#" id="lnkForce">Intentar aquí igual</a></div>`; $('btnCopyUrl').addEventListener('click', () => copyText(location.href, 'Dirección')); $('lnkForce').addEventListener('click', (e) => { e.preventDefault(); forceInFrame = true; toast('Intentando dentro del visor'); }); }
+  const n = (PROFILE.cells + LBC_DIDS.length + 12 + LBC_EXT.length + LBC_ID.length + EVC_DIDS.length + 5); $('planInfo').textContent = `~${n} peticiones · ${Math.round(n * 0.18)}–${Math.round(n * 0.35)} s`;
+  try { const p = localStorage.getItem('revisaelauto_ev_inspector'); if (p) $('inInspector').value = p; const b = localStorage.getItem('revisaelauto_ev_blename'); if (b !== null) $('inBleName').value = b; } catch (e) { /* nada */ }
+  $('inInspector').addEventListener('change', () => { try { localStorage.setItem('revisaelauto_ev_inspector', $('inInspector').value); } catch (e) { /* nada */ } });
+  $('inBleName').addEventListener('change', () => { try { localStorage.setItem('revisaelauto_ev_blename', $('inBleName').value.trim()); } catch (e) { /* nada */ } });
+})();
+</script>
+
+</body>
+</html>
